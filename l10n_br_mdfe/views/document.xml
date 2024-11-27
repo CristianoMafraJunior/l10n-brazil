@@ -162,6 +162,7 @@
                 >
                     <group>
                         <field name="mdfe_modal" widget="radio" />
+                        <field name="mdfe_transp_type" />
                     </group>
                     <group
                         attrs="{'invisible': [('mdfe_modal', '!=', '1')]}"
@@ -192,8 +193,12 @@
                                         <field name="rodo_vehicle_state_id" />
                                         <field
                                             name="mdfe30_prop"
-                                            context="{ 'form_view_ref': 'l10n_br_mdfe.res_partner_prop_form_view', }"
-                                            domain="[ ('vat', '!=', False), ('mdfe30_RNTRC', '!=', False), ]"
+                                            context="{
+                                                'form_view_ref': 'l10n_br_mdfe.res_partner_prop_form_view',
+                                            }"
+                                            domain="[
+                                                ('vat', '!=', False),
+                                            ]"
                                         />
                                     </group>
                                     <group>
@@ -420,6 +425,19 @@
                     </group> -->
                 </page>
             </xpath>
+
+            <xpath expr="//button[@name='action_document_cancel']" position="before">
+                <button
+                    name="action_document_closure"
+                    type="object"
+                    string="Encerrar"
+                    groups="l10n_br_fiscal.group_user"
+                    attrs="{'invisible': [('state_edoc', '!=', 'autorizada')]}"
+                />
+            </xpath>
+
         </field>
     </record>
+
+
 </odoo>
