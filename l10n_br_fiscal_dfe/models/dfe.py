@@ -90,6 +90,11 @@ class DFe(models.Model):
 
     @api.model
     def _document_distribution(self):
+        self.last_nsu = (
+            self.last_nsu
+            if self.last_nsu and self.last_nsu.isdigit()
+            else "000000000000000"
+        )
         maxNSU = ""
         while maxNSU != self.last_nsu:
             try:
