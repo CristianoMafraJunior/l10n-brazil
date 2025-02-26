@@ -347,16 +347,8 @@ class FiscalDocumentLineMixin(models.AbstractModel):
     )
 
     icms_tax_benefit_id = fields.Many2one(
-        comodel_name="l10n_br_fiscal.tax.definition",
-        string="Tax Benefit",
-        domain=[
-            ("is_benefit", "=", True),
-            ("tax_domain", "=", TAX_DOMAIN_ICMS),
-        ],
-    )
-
-    icms_tax_benefit_code = fields.Char(
-        string="Tax Benefit Code", related="icms_tax_benefit_id.code", store=True
+        "l10n_br_fiscal.icms.benefit",
+        readonly=True,
     )
 
     icms_base_type = fields.Selection(
