@@ -143,7 +143,7 @@ class NFeLine(spec_models.StackedModel):
 
     # CNPJFab TODO
 
-    nfe40_cBenef = fields.Char(related="icms_tax_benefit_code")
+    nfe40_cBenef = fields.Char()
 
     # TODO em uma importação de XML deve considerar esse campo na busca do
     # ncm_id
