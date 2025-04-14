@@ -418,7 +418,7 @@ class FiscalDocumentLineMixinMethods(models.AbstractModel):
     @api.onchange("product_id")
     def _onchange_product_id_fiscal(self):
         if self.product_id:
-            self.name = self.product_id.display_name
+            self.name = self.product_id.name
             self.fiscal_type = self.product_id.fiscal_type
             self.uom_id = self.product_id.uom_id
             self.ncm_id = self.product_id.ncm_id

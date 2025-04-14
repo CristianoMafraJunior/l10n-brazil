@@ -212,11 +212,7 @@ class NFeLine(spec_models.StackedModel):
         nfe40_cProd = self.product_id.default_code or self.nfe40_cProd or ""
         export_dict["cProd"] = nfe40_cProd
 
-        nfe40_xProd = (
-            self.product_id.with_context(display_default_code=False).display_name
-            or self.name
-            or ""
-        )
+        nfe40_xProd = self.name or ""
         export_dict["xProd"] = nfe40_xProd[:120].replace("\n", " ").strip()
 
         nfe40_cEAN = self.product_id.barcode or "SEM GTIN"
