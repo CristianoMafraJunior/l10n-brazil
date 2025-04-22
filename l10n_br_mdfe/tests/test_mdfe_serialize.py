@@ -172,6 +172,14 @@ class TestMDFeSerialize(TransactionCase):
         mdfe.mdfe30_infTermCarreg = [
             (0, 0, {"loading_harbor": "BRADR"}),
             (0, 0, {"loading_harbor": "BRANT"}),
+            (0, 0, {"loading_harbor": "BRADR"}),
+            (0, 0, {"loading_harbor": "BRANT"}),
+            (0, 0, {"loading_harbor": "BRADR"}),
+            (0, 0, {"loading_harbor": "BRANT"}),
+            (0, 0, {"loading_harbor": "BRADR"}),
+            (0, 0, {"loading_harbor": "BRANT"}),
+            (0, 0, {"loading_harbor": "BRADR"}),
+            (0, 0, {"loading_harbor": "BRANT"}),
         ]
         mdfe.mdfe30_infTermDescarreg = [
             (0, 0, {"unloading_harbor": "BRAFU"}),
