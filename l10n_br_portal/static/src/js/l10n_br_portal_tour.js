@@ -1,14 +1,13 @@
 odoo.define("l10n_br_portal.tour", function (require) {
     "use strict";
 
-    var ajax = require("web.ajax");
     var session = require("web.session");
     var tour = require("web_tour.tour");
 
     var domReady = new Promise(function (resolve) {
         $(resolve);
     });
-    var ready = Promise.all([domReady, session.is_bound, ajax.loadXML()]);
+    var ready = Promise.all([domReady, session.is_bound]);
 
     tour.register(
         "l10n_br_portal_tour",
@@ -62,10 +61,7 @@ odoo.define("l10n_br_portal.tour", function (require) {
             },
             {
                 trigger: "button[type='submit']",
-            },
-            {
-                content: "Go /my url",
-                trigger: 'a[href*="/my"]',
+                run: "click",
             },
         ]
     );

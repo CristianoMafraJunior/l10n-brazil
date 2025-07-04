@@ -9,7 +9,7 @@ class ResPartner(models.Model):
     _inherit = [_name, "l10n_br_base.party.mixin"]
 
     def can_edit_vat(self):
-        can_edit_vat = super(ResPartner, self).can_edit_vat()
+        can_edit_vat = super().can_edit_vat()
         if not can_edit_vat:
             return can_edit_vat
         return not self.cnpj_cpf
