@@ -53,27 +53,22 @@ class HrExpense(models.Model):
             [("id", "=", self.invoice_id.id)], limit=1
         )
 
-        invoice_vals = invoice._convert_to_write(invoice._cache)
-        invoice_vals.update(
+        invoice.write(
             {
                 "currency_id": self.currency_id.id,
+                "user_id": self.user_id.id,
             }
         )
 
-        invoice.write(invoice_vals)
-
-        invoice.fiscal_document_id._onchange_document_serie_id()
-        invoice.fiscal_document_id._onchange_company_id()
+        invoice.fiscal_document_id._compute_document_serie_id()
 
         for line in invoice.invoice_line_ids:
-            line._onchange_product_id()
+            # line._onchange_product_id()
             line._onchange_product_id_fiscal()
             line.price_unit = self.unit_amount
             line._onchange_fiscal_operation_id()
             line._onchange_fiscal_operation_line_id()
             line._onchange_fiscal_tax_ids()
-
-        invoice._onchange_invoice_line_ids()
 
         self.write(
             {

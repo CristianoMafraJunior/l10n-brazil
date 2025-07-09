@@ -1,7 +1,9 @@
-from odoo.tests.common import SavepointCase
+# Copyright 2024 - TODAY, Kaynnan Lemes <kaynnan.lemes@escodoo.com.br>
+# License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
+from odoo.tests.common import TransactionCase
 
 
-class TestL10nBrHrExpenseInvoice(SavepointCase):
+class TestL10nBrHrExpenseInvoice(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -16,9 +18,11 @@ class TestL10nBrHrExpenseInvoice(SavepointCase):
                         0,
                         {
                             "name": "expense_1",
-                            "product_id": cls.env.ref("hr_expense.car_travel").id,
+                            "product_id": cls.env.ref(
+                                "hr_expense.expense_product_meal"
+                            ).id,
                             "product_uom_id": cls.env.ref(
-                                "hr_expense.car_travel"
+                                "hr_expense.expense_product_meal"
                             ).uom_id.id,
                             "unit_amount": 500.0,
                             "employee_id": cls.env.ref("hr.employee_admin").id,
@@ -29,9 +33,11 @@ class TestL10nBrHrExpenseInvoice(SavepointCase):
                         0,
                         {
                             "name": "expense_2",
-                            "product_id": cls.env.ref("hr_expense.air_ticket").id,
+                            "product_id": cls.env.ref(
+                                "hr_expense.expense_product_mileage"
+                            ).id,
                             "product_uom_id": cls.env.ref(
-                                "hr_expense.air_ticket"
+                                "hr_expense.expense_product_mileage"
                             ).uom_id.id,
                             "unit_amount": 700.0,
                             "employee_id": cls.env.ref("hr.employee_admin").id,
