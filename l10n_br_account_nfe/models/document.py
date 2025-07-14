@@ -144,6 +144,7 @@ class DocumentNfe(models.Model):
                 rec.state_edoc == "em_digitacao"
                 or not rec._need_compute_nfe_tags()
                 or rec._is_without_payment()
+                or rec.move_ids.move_type in ("out_refund", "in_refund") # TODO TESTE
             ):
                 continue
 
@@ -157,6 +158,21 @@ class DocumentNfe(models.Model):
                         mode=rec.move_ids.payment_mode_id.name,
                     )
                 )
+
+    def _reverse_moves(self, default_values_list=None, cancel=False):
+        new_moves = super()._reverse_moves(
+            default_values_list=default_values_list, cancel=cancel
+        )
+
+        payment_mode_id = False
+        if self.env.context.get("payment_mode_id"):
+            payment_mode_id = self.env["account.payment.mode"].browse(
+                self.env.context.get("payment_mode_id")
+            )
+        for move in new_moves:
+            move.payment_mode_id = payment_mode_id
+
+        return new_moves
 
     def _update_nfce_for_offline_contingency(self):
         res = super()._update_nfce_for_offline_contingency()
