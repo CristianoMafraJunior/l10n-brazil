@@ -3,10 +3,10 @@
 
 from datetime import date, timedelta
 
-from odoo.tests.common import SavepointCase
+from odoo.tests.common import TransactionCase
 
 
-class L10nBrSaleBLanketOrderTest(SavepointCase):
+class L10nBrSaleBLanketOrderTest(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -146,20 +146,26 @@ class L10nBrSaleBLanketOrderTest(SavepointCase):
             "Error: Sale Order is not in sale state after confirm.",
         )
 
-        # Create invoice for the sale order
-        invoices = {
-            line.fiscal_operation_line_id.get_document_type(line.company_id)
-            for line in sale_order.order_line
-        }
+        invoice_wizard = (
+            self.env["sale.advance.payment.inv"]
+            .with_context(active_ids=sale_order.ids, active_model="sale.order")
+            .create(
+                {
+                    "advance_payment_method": "delivered",
+                }
+            )
+        )
 
-        # Ensure there is at least one invoice created
-        self.assertTrue(invoices, "Error: No invoices were created.")
+        invoice_wizard.create_invoices()
 
-        # Get the IDs of the invoices
-        invoice_ids = [invoice.id for invoice in invoices]
+        invoices = sale_order.invoice_ids
+        self.assertTrue(invoices)
 
-        # Get the invoices related to the sale order
-        invoices = self.env["account.move"].search([("id", "in", invoice_ids)])
+        for invoice in invoices:
+            self.assertEqual(
+                invoice.fiscal_operation_id,
+                sale_order.order_line[0].fiscal_operation_id,
+            )
 
         # Check if all invoices are in "draft" state initially
         self.assertTrue(

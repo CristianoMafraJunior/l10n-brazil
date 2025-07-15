@@ -31,10 +31,10 @@ class SaleBlanketOrderWizard(models.TransientModel):
         :return: dict
         """
         line = self.env["account.move.line"].new(values.copy())
-        line._onchange_price_subtotal()
+        # line._onchange_price_subtotal()
         new_values = line._convert_to_write(line._cache)
         values.update(new_values)
-        del values["move_id"]
+        # del values["move_id"]
         return values
 
     def _prepare_so_vals(

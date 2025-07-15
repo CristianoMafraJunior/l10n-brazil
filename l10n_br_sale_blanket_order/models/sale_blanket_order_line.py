@@ -90,6 +90,13 @@ class SaleBlanketOrderLine(models.Model):
     price_tax = fields.Monetary(compute_sudo=True)
     price_total = fields.Monetary(compute_sudo=True)
 
+    currency_id = fields.Many2one(
+        comodel_name="res.currency",
+        related="order_id.currency_id",
+        store=True,
+        readonly=True,
+    )
+
     @api.model
     def _cnae_domain(self):
         company = self.env.company
@@ -128,7 +135,7 @@ class SaleBlanketOrderLine(models.Model):
             # Update taxes fields
             line._update_fiscal_taxes()
             # Call mixin compute method
-            line._compute_amounts()
+            # line._compute_amounts()
             # Update record
             line.update(
                 {
@@ -149,10 +156,11 @@ class SaleBlanketOrderLine(models.Model):
     @api.onchange("fiscal_tax_ids")
     def _onchange_fiscal_tax_ids(self):
         if self.product_id and self.fiscal_operation_line_id:
-            super()._onchange_fiscal_tax_ids()
+            res = super()._onchange_fiscal_tax_ids()
             self.taxes_id = self.fiscal_tax_ids.account_taxes(
                 user_type="sale", fiscal_operation=self.fiscal_operation_id
             )
+            return res
 
     def _get_product_price(self):
         self.ensure_one()
