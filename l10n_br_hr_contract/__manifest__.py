@@ -25,6 +25,9 @@
         "views/l10n_br_hr_contract_action.xml",
         # Menu
         "views/l10n_br_hr_contract_menu.xml",
+        # Report
+        "report/hr_contract_report.xml",
+        "report/hr_contract_report_templates.xml",
     ],
     "external_dependencies": {"python": ["erpbrasil.base>=2.3.0"]},
     "installable": True,

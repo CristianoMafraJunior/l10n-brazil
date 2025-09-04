@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <template id="report_hr_contract_br">
+    <t t-call="web.html_container">
+      <t t-foreach="docs" t-as="contract">
+        <t t-call="web.external_layout_standard">
+          <!-- contexto exigido pelo layout padrão -->
+          <t t-set="o" t-value="contract"/>
+          <t t-set="company" t-value="contract.company_id"/>
+
+          <div class="page">
+            <h3 class="text-center">Contrato de Trabalho</h3>
+
+            <!-- Partes -->
+            <p>
+              <strong>Empregador:</strong>
+              <t t-esc="contract.company_id.name"/>
+              <t t-if="contract.company_id.partner_id.vat"> — CNPJ/CPF:
+                <t t-esc="contract.company_id.partner_id.vat"/>
+              </t>
+            </p>
+            <p>
+              <strong>Empregado:</strong>
+              <t t-esc="contract.employee_id.name"/>
+              <t t-if="contract.employee_id.address_home_id and contract.employee_id.address_home_id.vat">
+                — CPF/CNPJ: <t t-esc="contract.employee_id.address_home_id.vat"/>
+              </t>
+            </p>
+
+            <!-- Condições essenciais -->
+            <table class="table table-sm o_main_table">
+              <tbody>
+                <tr>
+                  <td><strong>Referência</strong></td>
+                  <td t-esc="contract.name or '-'"/>
+                </tr>
+                <tr>
+                  <td><strong>Cargo</strong></td>
+                  <td t-esc="(contract.job_id and contract.job_id.name) or '-'"/>
+                </tr>
+                <tr>
+                  <td><strong>Início</strong></td>
+                  <td><span t-field="contract.date_start" t-options="{'widget': 'date'}"/></td>
+                </tr>
+                <tr t-if="contract.date_end">
+                  <td><strong>Término</strong></td>
+                  <td><span t-field="contract.date_end" t-options="{'widget': 'date'}"/></td>
+                </tr>
+                <tr>
+                  <td><strong>Salário (mensal)</strong></td>
+                  <td>
+                    <span t-field="contract.wage"
+                          t-options="{'widget': 'monetary', 'display_currency': contract.company_id.currency_id}"/>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Cláusulas mínimas -->
+            <p>
+              O empregado exercerá a função indicada, cumprindo a jornada definida pela empresa.
+              O salário informado está sujeito a reajustes conforme legislação e acordos aplicáveis.
+              Demais condições específicas poderão constar em aditivos.
+            </p>
+
+            <!-- Assinaturas -->
+            <div style="margin-top:40px;">
+              <div class="row">
+                <div class="col-6" style="text-align:center;">
+                  <div style="border-top:1px solid #000; width:100%; margin-top:40px;"></div>
+                  <div><strong t-esc="contract.company_id.name"/></div>
+                  <div>Empregador</div>
+                </div>
+                <div class="col-6" style="text-align:center;">
+                  <div style="border-top:1px solid #000; width:100%; margin-top:40px;"></div>
+                  <div><strong t-esc="contract.employee_id.name"/></div>
+                  <div>Empregado</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </t>
+      </t>
+    </t>
+  </template>
+</odoo>
