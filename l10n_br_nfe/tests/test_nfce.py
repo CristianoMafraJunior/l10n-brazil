@@ -46,8 +46,8 @@ class TestNFCe(TestNFeExport):
             }
         )
         cls.document_id.company_id.certificate_nfe_id = certificate_id
-        cls.document_id.company_id.nfce_csc_token = "DUMMY"
-        cls.document_id.company_id.nfce_csc_code = "DUMMY"
+        cls.document_id.company_id.nfce_csc_token = "1"
+        cls.document_id.company_id.nfce_csc_code = "1"
 
         cls.prepare_test_nfe(cls.document_id)
 

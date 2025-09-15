@@ -1,7 +1,7 @@
 # Copyright 2023 KMEE (Felipe Zago Rodrigues <felipe.zago@kmee.com.br>)
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
 
-from odoo import Command
+from odoo import Command, fields
 from odoo.tests import TransactionCase
 
 
@@ -59,9 +59,19 @@ class TestAccountNFCeContingency(TransactionCase):
                 "company_id": cls.env.ref("base.main_company").id,
                 "line_ids": [
                     Command.create(
-                        {"account_id": receivable_account_id.id, "credit": 10}
+                        {
+                            "account_id": receivable_account_id.id,
+                            "credit": 10,
+                            "date_maturity": fields.Date.today(),
+                        }
                     ),
-                    Command.create({"account_id": payable_account_id.id, "debit": 10}),
+                    Command.create(
+                        {
+                            "account_id": payable_account_id.id,
+                            "debit": 10,
+                            "date_maturity": fields.Date.today(),
+                        }
+                    ),
                 ],
             }
         )

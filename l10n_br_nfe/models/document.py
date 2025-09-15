@@ -907,19 +907,36 @@ class NFe(spec_models.StackedModel):
 
     def _serialize(self, edocs):
         edocs = super()._serialize(edocs)
-        for record in self.with_context(lang="pt_BR").filtered(
-            filter_processador_edoc_nfe
-        ):
-            record.flush_model()
-            self.env.invalidate_all()
+        docs = self.with_context(lang="pt_BR").filtered(filter_processador_edoc_nfe)
+        moves_by_processor = {}
+        for record in docs:
             inf_nfe = record._build_binding("nfe", "40")
+            inf_nfe_supl = (
+                record.nfe40_infNFeSupl._build_binding("nfe", "40")
+                if record.nfe40_infNFeSupl
+                else None
+            )
+            edocs.append(Nfe(infNFe=inf_nfe, infNFeSupl=inf_nfe_supl, signature=None))
+            processor = record.processador_edoc
+            if not processor:
+                continue
+            if (
+                not record.processador_edoc
+                or record.processador_edoc.id != processor.id
+            ):
+                record.write({"processador_edoc": processor.id})
+            if record.move_ids:
+                need_update = record.move_ids.filtered(
+                    lambda m, pid=processor.id: m.processador_edoc.id != pid
+                )
+                if need_update:
+                    moves_by_processor.setdefault(
+                        processor.id, self.env["account.move"].browse()
+                    )
+                    moves_by_processor[processor.id] |= need_update
+        for proc_id, moves in moves_by_processor.items():
+            moves.write({"processador_edoc": proc_id})
 
-            inf_nfe_supl = None
-            if record.nfe40_infNFeSupl:
-                inf_nfe_supl = record.nfe40_infNFeSupl._build_binding("nfe", "40")
-
-            nfe = Nfe(infNFe=inf_nfe, infNFeSupl=inf_nfe_supl, signature=None)
-            edocs.append(nfe)
         return edocs
 
     def _edoc_processor(self):
@@ -1244,13 +1261,25 @@ class NFe(spec_models.StackedModel):
 
     def _prepare_nfce_send(self):
         self.ensure_one()
-        self._prepare_payments_for_nfce()
-        self.nfe40_infNFeSupl = self.env["l10n_br_fiscal.document.supplement"].create(
-            {
-                "nfe40_qrCode": self.get_nfce_qrcode(),
-                "nfe40_urlChave": self.get_nfce_qrcode_url(),
-            }
+        self.nfe40_detPag.filtered(lambda p: p.nfe40_tPag == "99").write(
+            {"nfe40_xPag": "Outros"}
         )
+
+    def _document_qrcode(self):
+        res = super()._document_qrcode()
+
+        nfce_docs = self.filtered(lambda d: d.document_type == MODELO_FISCAL_NFCE)
+        for record in nfce_docs:
+            record.nfe40_infNFeSupl.unlink()
+            record.nfe40_infNFeSupl = self.env[
+                "l10n_br_fiscal.document.supplement"
+            ].create(
+                {
+                    "qrcode": record.get_nfce_qrcode(),
+                    "url_key": record.get_nfce_qrcode_url(),
+                }
+            )
+        return res
 
     def _eletronic_document_send(self):
         super()._eletronic_document_send()
@@ -1537,6 +1566,8 @@ class NFe(spec_models.StackedModel):
         processador = self._edoc_processor()
         if self.nfe_transmission == "1":
             return processador.monta_qrcode(self.document_key)
+        if not self.serialize() or not len(self.serialize()):
+            return
 
         serialized_doc = self.serialize()[0]
         xml = processador.assina_raiz(serialized_doc, serialized_doc.infNFe.Id)
@@ -1545,14 +1576,10 @@ class NFe(spec_models.StackedModel):
     def get_nfce_qrcode_url(self):
         if self.document_type != MODELO_FISCAL_NFCE:
             return
+        if self._edoc_processor() is None:
+            return
 
         return self._edoc_processor().consulta_qrcode_url
-
-    def _prepare_payments_for_nfce(self):
-        for rec in self.filtered(lambda d: d.document_type == MODELO_FISCAL_NFCE):
-            rec.nfe40_detPag.filtered(lambda p: p.nfe40_tPag == "99").write(
-                {"nfe40_xPag": "Outros"}
-            )
 
     def action_danfe_nfce_report(self):
         return (
