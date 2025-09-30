@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-
     <!-- ADMISSION TYPE -->
     <record id="admission_type_1" model="hr.contract.admission.type">
         <field name="name">Admissão</field>
@@ -23,5 +22,4 @@
         >Transferência por motivo de sucessão, incorporação, cisão ou fusão</field>
         <field name="code">4</field>
     </record>
-
 </odoo>

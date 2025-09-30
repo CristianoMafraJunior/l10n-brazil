@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-
     <!-- SALARY UNIT -->
     <record id="salary_unit_5" model="hr.contract.salary.unit">
         <field name="name">Hourly</field>
@@ -36,5 +35,4 @@
         <field name="name">Não aplicável - salário exclusivamente variável</field>
         <field name="code">7</field>
     </record>
-
 </odoo>

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-
     <!-- LABOR REGIME -->
     <record id="labor_regime_clt" model="hr.contract.labor.regime">
         <field name="name">Consolidação das Leis de Trabalho</field>
@@ -25,5 +24,4 @@
         <field name="short_name">RJP</field>
         <field name="code">9</field>
     </record>
-
 </odoo>

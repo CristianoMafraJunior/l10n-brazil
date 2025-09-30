@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-
     <!-- NOTICE OF TERMINATION TYPE -->
     <record id="notice_of_termination_1" model="hr.contract.notice.termination">
         <field name="name">Trabalhado</field>
@@ -17,5 +16,4 @@
     <record id="notice_of_termination_4" model="hr.contract.notice.termination">
         <field name="name">Sem justa causa</field>
     </record>
-
 </odoo>
