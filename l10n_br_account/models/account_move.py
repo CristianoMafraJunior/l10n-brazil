@@ -124,6 +124,13 @@ class AccountMove(models.Model):
             self._onchange_ind_final()
         return res
 
+    @api.onchange("ind_final")
+    def _onchange_ind_final(self):
+        for move in self:
+            for line in move.invoice_line_ids:
+                if line.ind_final != move.ind_final:
+                    line.ind_final = move.ind_final
+
     @api.constrains("fiscal_document_id", "document_type_id")
     def _check_fiscal_document_type(self):
         for rec in self:
