@@ -183,6 +183,22 @@ class TestFiscalDocumentNFSePaulistana(TestFiscalDocumentNFSeCommon):
         self.nfse_same_state.rps_number = "50"
         self.nfse_same_state.document_number = "50"
 
+        nbs = self.env.ref("l10n_br_fiscal.nbs_124043300")
+        cbs_cst = self.env.ref("l10n_br_fiscal.cst_icms_00")
+        operation_indicator = self.env.ref("l10n_br_fiscal.operation_indicator_030101")
+
+        self.nfse_same_state.rps_number = "50"
+        self.nfse_same_state.document_number = "50"
+
+        for line in self.nfse_same_state.fiscal_line_ids:
+            line.write(
+                {
+                    "nbs_id": nbs.id,
+                    "operation_indicator_id": operation_indicator.id,
+                    "cbs_cst_id": cbs_cst.id,
+                }
+            )
+
         with patch(
             "odoo.addons.l10n_br_nfse.models.document.Document.make_pdf",
             return_value=None,
