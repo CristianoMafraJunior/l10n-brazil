@@ -213,6 +213,7 @@ class L10nBrFiscalDfeDocument(models.Model):
             record.display_name = record.access_key
 
     def action_download_xml(self):
+        self = self.sudo()
         self.ensure_one()
         complete_dfe = self.dfe_ids.filtered(
             lambda d: d.dfe_nfe_document_type == "dfe_nfe_complete"
@@ -225,6 +226,7 @@ class L10nBrFiscalDfeDocument(models.Model):
 
     def action_download_xmls_zip(self):
         """Download complete NF-e XMLs of selected documents as a zip file."""
+        self = self.sudo()
         attachments = self.env["ir.attachment"]
         for doc in self:
             complete_dfe = doc.dfe_ids.filtered(
@@ -260,6 +262,7 @@ class L10nBrFiscalDfeDocument(models.Model):
         }
 
     def make_pdf(self):
+        self = self.sudo()
         complete_dfe_ids = self.dfe_ids.filtered(
             lambda dfe: dfe.dfe_nfe_document_type == "dfe_nfe_complete"
         )
