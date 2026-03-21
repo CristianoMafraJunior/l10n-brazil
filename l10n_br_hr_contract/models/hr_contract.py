@@ -53,7 +53,7 @@ class HrContract(models.Model):
     )
 
     union_cnpj = fields.Char(
-        string="Union CNPJ", related="partner_union.cnpj_cpf", readonly=True
+        string="Union CNPJ", related="partner_union.vat", readonly=True
     )
 
     union_entity_code = fields.Char(
