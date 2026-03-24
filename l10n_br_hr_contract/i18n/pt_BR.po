@@ -39,6 +39,7 @@ msgstr "Por morte"
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_bond_type__code
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_regime__code
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_salary_unit__code
+#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_l10n_br_hr_contract_data_abstract__code
 msgid "Code"
 msgstr "Código"
 
@@ -94,6 +95,11 @@ msgid "FGTS withdrawal code"
 msgstr "Código de Retirada FGTS"
 
 #. module: l10n_br_hr_contract
+#: model:ir.model,name:l10n_br_hr_contract.model_l10n_br_hr_contract_data_abstract
+msgid "HR Data Base Abstract"
+msgstr ""
+
+#. module: l10n_br_hr_contract
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_admission_type__id
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_bond_type__id
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_regime__id
@@ -102,6 +108,11 @@ msgstr "Código de Retirada FGTS"
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_salary_unit__id
 msgid "ID"
 msgstr "ID"
+
+#. module: l10n_br_hr_contract
+#: model:ir.model.fields,help:l10n_br_hr_contract.field_hr_contract__union_cnpj
+msgid "Identification Number for selected type"
+msgstr ""
 
 #. module: l10n_br_hr_contract
 #: model:ir.actions.act_window,name:l10n_br_hr_contract.action_hr_contract_labor_bond_type
@@ -129,16 +140,6 @@ msgid "Labor regime"
 msgstr "Regime de trabalho"
 
 #. module: l10n_br_hr_contract
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_admission_type____last_update
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_bond_type____last_update
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_regime____last_update
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_notice_termination____last_update
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_resignation_cause____last_update
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_salary_unit____last_update
-msgid "Last Modified on"
-msgstr "Última modificação em"
-
-#. module: l10n_br_hr_contract
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_admission_type__write_uid
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_bond_type__write_uid
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_regime__write_uid
@@ -164,9 +165,9 @@ msgid "Monthly hours"
 msgstr "Horas mensais"
 
 #. module: l10n_br_hr_contract
-#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_resignation_cause
-msgid "Motivo da demissão"
-msgstr "Motivo da demissão"
+#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_l10n_br_hr_contract_data_abstract__name
+msgid "Name"
+msgstr ""
 
 #. module: l10n_br_hr_contract
 #: model:ir.actions.act_window,name:l10n_br_hr_contract.action_hr_contract_notice_termination
@@ -191,17 +192,17 @@ msgid "Notice of termination type"
 msgstr "Tipo de Aviso prévio"
 
 #. module: l10n_br_hr_contract
-#: selection:hr.contract,welfare_policy:0
+#: model:ir.model.fields.selection,name:l10n_br_hr_contract.selection__hr_contract__welfare_policy__rgps
 msgid "Regime Geral da Previdência Social"
 msgstr "Regime Geral da Previdência Social"
 
 #. module: l10n_br_hr_contract
-#: selection:hr.contract,welfare_policy:0
+#: model:ir.model.fields.selection,name:l10n_br_hr_contract.selection__hr_contract__welfare_policy__rpps
 msgid "Regime Próprio da Previdência Social"
 msgstr "Regime Próprio da Previdência Social"
 
 #. module: l10n_br_hr_contract
-#: selection:hr.contract,welfare_policy:0
+#: model:ir.model.fields.selection,name:l10n_br_hr_contract.selection__hr_contract__welfare_policy__rpse
 msgid "Regime de Previdência Social no Exterior"
 msgstr "Regime de Previdência Social no Exterior"
 
@@ -235,6 +236,7 @@ msgstr "Data da demissão"
 
 #. module: l10n_br_hr_contract
 #: model:ir.actions.act_window,name:l10n_br_hr_contract.action_hr_contract_salary_unit
+#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_salary_unit__name
 #: model:ir.ui.menu,name:l10n_br_hr_contract.menu_hr_contract_salary_unit
 msgid "Salary Unit"
 msgstr "Unidade do salário"
@@ -245,14 +247,9 @@ msgid "Salary Unity"
 msgstr "Unidade do salário"
 
 #. module: l10n_br_hr_contract
-#: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_salary_unit__name
-msgid "Salary unit"
-msgstr "Unidade do salário"
-
-#. module: l10n_br_hr_contract
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract_labor_regime__short_name
-msgid "Short name"
-msgstr "Nome curto"
+msgid "Short Name"
+msgstr ""
 
 #. module: l10n_br_hr_contract
 #: model:ir.model.fields,field_description:l10n_br_hr_contract.field_hr_contract__partner_union
@@ -269,19 +266,24 @@ msgstr ""
 "(código_de_entidade_de_individual) definido."
 
 #. module: l10n_br_hr_contract
-#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_admission_type
-msgid "Tipo de admissão do trabalhador"
-msgstr "Tipo de admissão do trabalhador"
+#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_resignation_cause
+msgid "Termination Reason"
+msgstr ""
 
 #. module: l10n_br_hr_contract
-#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_notice_termination
-msgid "Tipo de aviso prévio"
-msgstr "Tipo de aviso prévio"
+#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_admission_type
+msgid "Type of employee hiring"
+msgstr ""
 
 #. module: l10n_br_hr_contract
 #: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_labor_regime
-msgid "Tipo de regime trabalhista"
-msgstr "Tipo de regime trabalhista"
+msgid "Type of employment contract"
+msgstr ""
+
+#. module: l10n_br_hr_contract
+#: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_notice_termination
+msgid "Type of notice period"
+msgstr ""
 
 #. module: l10n_br_hr_contract
 #: model:ir.model,name:l10n_br_hr_contract.model_hr_contract_salary_unit
@@ -327,6 +329,27 @@ msgstr "e-Social: S2300 - tpRegPrev"
 #: model:ir.model.fields,help:l10n_br_hr_contract.field_hr_contract__labor_regime_id
 msgid "e-Social: S2200/S2300 - tpRegTrab"
 msgstr "e-Social: S2200/S2300 - tpRegTrab"
+
+#~ msgid "Last Modified on"
+#~ msgstr "Última modificação em"
+
+#~ msgid "Motivo da demissão"
+#~ msgstr "Motivo da demissão"
+
+#~ msgid "Salary unit"
+#~ msgstr "Unidade do salário"
+
+#~ msgid "Short name"
+#~ msgstr "Nome curto"
+
+#~ msgid "Tipo de admissão do trabalhador"
+#~ msgstr "Tipo de admissão do trabalhador"
+
+#~ msgid "Tipo de aviso prévio"
+#~ msgstr "Tipo de aviso prévio"
+
+#~ msgid "Tipo de regime trabalhista"
+#~ msgstr "Tipo de regime trabalhista"
 
 #~ msgid "Advantages..."
 #~ msgstr "Vantagens..."
