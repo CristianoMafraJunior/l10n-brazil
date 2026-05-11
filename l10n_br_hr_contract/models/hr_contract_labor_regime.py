@@ -16,11 +16,9 @@ class HrContractLaborRegime(models.Model):
 
     code = fields.Char(size=1)
 
-    def name_get(self):
-        data_names = []
+    def _compute_display_name(self):
         for data in self:
             name = data.name
             if data.short_name:
                 name = f"{data.short_name} - {data.name}"
-            data_names.append((data.id, name))
-        return data_names
+            data.display_name = name

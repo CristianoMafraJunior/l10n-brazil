@@ -13,9 +13,7 @@ class HrDataAbstract(models.AbstractModel):
 
     name = fields.Char(required=True, index=True)
 
-    def name_get(self):
-        data_names = []
+    def _compute_display_name(self):
         for data in self:
             name = f"{data.code} - {data.name}"
-            data_names.append((data.id, name))
-        return data_names
+            data.display_name = name

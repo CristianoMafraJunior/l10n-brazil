@@ -51,8 +51,7 @@ class TestL10nBrContract(TransactionCase):
         self.assertEqual(
             admission_type,
             "1 - Admissão",
-            "The admission type name by name_get is not valid, "
-            "expected 'code - name'",
+            "The admission type name by name_get is not valid, expected 'code - name'",
         )
 
     def test_labor_regime(self):
@@ -61,8 +60,8 @@ class TestL10nBrContract(TransactionCase):
         )
         self.assertEqual(
             labor_regime,
-            "CLT - Consolidação das Leis de " "Trabalho",
-            "The labor regime name by name_get is not valid," " expected 'code - name'",
+            "CLT - Consolidação das Leis de Trabalho",
+            "The labor regime name by name_get is not valid, expected 'code - name'",
         )
 
     def test_labor_bond_type(self):
@@ -74,8 +73,7 @@ class TestL10nBrContract(TransactionCase):
             " empregador pessoa jurídica por contrato"
             " de trabalho regido pela CLT, por prazo"
             " indeterminado",
-            "The labor bond type name by name_get is not valid,"
-            " expected 'code - name'",
+            "The labor bond type name by name_get is not valid, expected 'code - name'",
         )
 
     def test_salary_unit(self):
@@ -83,7 +81,7 @@ class TestL10nBrContract(TransactionCase):
         self.assertEqual(
             salary_unit,
             "1 - Hourly",
-            "The salary unit name by name_get is not valid," " expected 'code - name'",
+            "The salary unit name by name_get is not valid, expected 'code - name'",
         )
 
     def test_resignation_cause(self):

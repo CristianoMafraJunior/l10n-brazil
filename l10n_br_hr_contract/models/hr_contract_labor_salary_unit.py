@@ -9,8 +9,7 @@ class HrContractSalaryUnit(models.Model):
     _name = "hr.contract.salary.unit"
     _inherit = "l10n_br_hr_contract.data.abstract"
     _description = (
-        "Unidade de pagamento da parte fixa da remuneração "
-        "e-Social - S-2200 undSalFixo"
+        "Unidade de pagamento da parte fixa da remuneração e-Social - S-2200 undSalFixo"
     )
 
     name = fields.Char(string="Salary Unit")
