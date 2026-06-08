@@ -1,6 +1,7 @@
 # Copyright 2022 KMEE
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+
 from odoo.tests import TransactionCase
 
 
@@ -25,8 +26,8 @@ class TestCnpjCommon(TransactionCase):
             "capital_social": "3000.00",
             "atividade_principal": [
                 {
-                    "code": "47.51-2-01",
-                    "text": "********",
+                    "code": "4751-2/01",
+                    "text": "Comércio atacadista de produtos têxteis",
                 }
             ],
         }
@@ -280,7 +281,7 @@ class TestCnpjCommon(TransactionCase):
                 {
                     "tipoSocio": "2",
                     "nome": "MARCELO ANTONIO BARROS DE CICCO",
-                    "qualificacao": "49 ",
+                    "qualificacao": "49",
                     "pais": {"codigo": "105", "descricao": "BRASIL"},
                     "representanteLegal": {"nome": "", "qualificacao": "00"},
                 },

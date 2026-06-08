@@ -2,12 +2,13 @@
 # @author Cristiano Mafra Junior
 import logging
 
-import requests
 from erpbrasil.base import misc
 from erpbrasil.base.fiscal import cnpj_cpf
 from erpbrasil.base.misc import punctuation_rm
 
 from odoo import Command, api, fields, models
+
+from odoo.addons.l10n_br_base.tools import requests_with_retries
 
 _logger = logging.getLogger(__name__)
 
@@ -67,14 +68,13 @@ class PartnerCnpjSearchWizard(models.TransientModel):
     def _get_partner_values(self, cnpj_cpf):
         webservice = self.env["l10n_br_cnpj_search.webservice.abstract"]
         provider_name = webservice.get_provider()
-        try:
-            response = requests.get(
-                webservice.get_api_url(cnpj_cpf),
-                headers=webservice.get_headers(),
-                timeout=5,
-            )
-        except requests.exceptions.Timeout:
-            _logger.debug("Request timed out!")
+
+        response = requests_with_retries(
+            webservice.get_api_url(cnpj_cpf),
+            headers=webservice.get_headers(),
+            timeout=5,
+        )
+
         data = webservice.validate(response)
         values = webservice.import_data(data)
         values["provider_name"] = provider_name
