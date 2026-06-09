@@ -5,10 +5,17 @@
 # @author Magno Costa <magno.costa@akretion.com.br>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+import logging
+
+import requests
 from erpbrasil.base.fiscal import cnpj_cpf, ie
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from odoo import _
 from odoo.exceptions import ValidationError
+
+_logger = logging.getLogger(__name__)
 
 
 def check_ie(env, l10n_br_ie_code, state, country):
@@ -83,3 +90,58 @@ def check_cnpj_cpf(env, cnpj_cpf_value, country):
                             d_id=cnpj_cpf_value,
                         )
                     )
+
+
+def requests_with_retries(url, method="GET", retries=3, backoff_factor=0.5, **kwargs):
+    """
+    Make HTTP requests with automatic retry logic and better error handling.
+
+    Args:
+        url (str): The URL to request
+        method (str): HTTP method (GET, POST, etc). Default: GET
+        retries (int): Number of retries for connection errors. Default: 3
+        backoff_factor (float): Backoff factor for retries. Default: 0.5
+        **kwargs: Additional arguments to pass to requests
+
+    Returns:
+        requests.Response: The response object
+
+    Raises:
+        ValidationError: If the request fails after retries or returns error status
+    """
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    try:
+        method_func = getattr(session, method.lower())
+        response = method_func(url, **kwargs)
+
+        if response.status_code != 200:
+            response_text = (
+                response.text.encode()
+                if isinstance(response.text, str)
+                else response.text
+            )
+            error_msg = (
+                f"Handle other unsuccessful status codes: \n"
+                f"URL: {url}\n"
+                f"Status Code: {response.status_code}\n"
+                f"Reason: {response.reason}\n"
+                f"Text: {response_text}"
+            )
+            raise ValidationError(_(error_msg))
+
+        return response
+
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Request failed: {str(e)}\nURL: {url}"
+        _logger.error(error_msg)
+        raise ValidationError(_(error_msg)) from e
