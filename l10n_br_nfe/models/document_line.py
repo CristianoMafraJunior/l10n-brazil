@@ -7,7 +7,7 @@ from enum import Enum
 
 from nfelib.nfe.bindings.v4_0.dfe_tipos_basicos_v1_00 import Tcibs, TtribNfe
 
-from odoo import api, fields
+from odoo import _, api, fields
 
 from odoo.addons.l10n_br_fiscal.constants.fiscal import (
     CFOP_DESTINATION_EXTERNAL,
@@ -1338,6 +1338,10 @@ class NFeLine(spec_models.StackedModel):
         if key in ["nfe40_CST", "nfe40_modBC", "nfe40_CSOSN"]:
             return  # (dealt with in _build_many2one)
 
+        if key == "nfe40_IBSCBS":
+            self._import_ibscbs_attrs(value, vals)
+            return
+
         if key.startswith("nfe40_ICMS") and key not in [
             "nfe40_ICMS",
             "nfe40_ICMSTot",
@@ -1359,6 +1363,16 @@ class NFeLine(spec_models.StackedModel):
                 .search([("code_unmasked", "=", value)], limit=1)
                 .id
             )
+        if key == "nfe40_CFOP" and value:
+            # Preserve the CFOP declared by the counterparty. cfop_id itself is
+            # recomputed by the de-para; partner_cfop_id keeps the original for
+            # bookkeeping / SPED (C197).
+            vals["partner_cfop_id"] = (
+                self.env["l10n_br_fiscal.cfop"]
+                .search([("code", "=", value)], limit=1)
+                .id
+            )
+
         if key == "nfe40_qCom":
             vals["quantity"] = float(value)
         if key == "nfe40_qTrib":
@@ -1446,6 +1460,17 @@ class NFeLine(spec_models.StackedModel):
                 value,
                 new_value,
             )
+
+        elif key == "nfe40_IBSCBS":
+            self._import_ibscbs_attrs(value, new_value)
+            if (
+                self._name == "account.invoice.line"
+                and comodel._name == "l10n_br_fiscal.document.line"
+            ):
+                # TODO do not hardcode!!
+                # stacked m2o
+                vals.update(new_value)
+            return
 
         if (
             self._name == "account.invoice.line"
@@ -1535,6 +1560,13 @@ class NFeLine(spec_models.StackedModel):
                 tax_domain_with_red,
                 limit=1,
             )
+            # If no fiscal tax with this base reduction exists yet, create it
+            # instead of falling back to a plain (no-reduction) tax, which
+            # would compute a wrong ICMS credit and diverge from the NFe/SPED.
+            if not fiscal_tax_id and percent:
+                fiscal_tax_id = self._create_reduced_fiscal_tax(
+                    tax_group_id, percent, cst_id, icms_percent_red
+                )
 
         if not fiscal_tax_id:
             if tax_domain_with_cst:
@@ -1633,6 +1665,107 @@ class NFeLine(spec_models.StackedModel):
         # elif kind == "cofins":  # (will also apply to cofinsst)
         #     pass
         #     # TODO  qBCProd, vAliqProd
+
+    def _create_reduced_fiscal_tax(
+        self, tax_group_id, percent, cst_id, percent_reduction
+    ):
+        """Create an ICMS fiscal tax with a base reduction when the company
+        has none configured for this rate/reduction combination.
+
+        Without this, an imported NFe line that declares an ICMS base
+        reduction (redução de base de cálculo) would fall back to a plain
+        no-reduction tax, computing a higher ICMS credit than the supplier
+        actually charged and diverging from the NFe / SPED. The created tax
+        carries the proper percent_reduction so it is reused on the next
+        import (idempotent via the earlier search on percent_reduction).
+        """
+        cst_field = "cst_{}_id".format(self.env.context.get("edoc_type", "in"))
+        vals = {
+            "name": _("ICMS %(percent)s%% Com Red. %(red)s%%")
+            % {"percent": percent, "red": percent_reduction},
+            "tax_group_id": tax_group_id,
+            "percent_amount": percent,
+            "percent_reduction": percent_reduction,
+            "percent_debit_credit": 0,
+            "value_amount": 0,
+            "icmsst_mva_percent": 0,
+            "icmsst_value": 0,
+            cst_field: cst_id,
+        }
+        return self.env["l10n_br_fiscal.tax"].create(vals)
+
+    def _import_ibscbs_attrs(self, value, odoo_attrs):
+        """Import IBSCBS tax attributes from NFe binding."""
+        if not value or not value.gIBSCBS:
+            return
+
+        gibscbs = value.gIBSCBS
+
+        # Base calculation
+        v_bc = float(gibscbs.vBC) if gibscbs.vBC else 0.0
+
+        # CST - shared for both IBS and CBS
+        cst_code = value.CST if value.CST else "000"
+        cst_ibs = self.env.ref(
+            f"l10n_br_fiscal.cst_ibs_{cst_code}", raise_if_not_found=False
+        )
+        if cst_ibs:
+            odoo_attrs["ibs_cst_id"] = cst_ibs.id
+        cst_cbs = self.env.ref(
+            f"l10n_br_fiscal.cst_cbs_{cst_code}", raise_if_not_found=False
+        )
+        if cst_cbs:
+            odoo_attrs["cbs_cst_id"] = cst_cbs.id
+
+        # IBS values
+        ibs_percent = 0.0
+        ibs_value = 0.0
+        if gibscbs.gIBSUF:
+            ibs_percent = float(gibscbs.gIBSUF.pIBSUF) if gibscbs.gIBSUF.pIBSUF else 0.0
+            ibs_value = float(gibscbs.gIBSUF.vIBSUF) if gibscbs.gIBSUF.vIBSUF else 0.0
+
+        odoo_attrs["ibs_base"] = v_bc
+        odoo_attrs["ibs_percent"] = ibs_percent
+        odoo_attrs["ibs_value"] = ibs_value
+
+        # CBS values
+        cbs_percent = 0.0
+        cbs_value = 0.0
+        if gibscbs.gCBS:
+            cbs_percent = float(gibscbs.gCBS.pCBS) if gibscbs.gCBS.pCBS else 0.0
+            cbs_value = float(gibscbs.gCBS.vCBS) if gibscbs.gCBS.vCBS else 0.0
+
+        odoo_attrs["cbs_base"] = v_bc
+        odoo_attrs["cbs_percent"] = cbs_percent
+        odoo_attrs["cbs_value"] = cbs_value
+
+        # Find IBS tax
+        ibs_tax = self.env["l10n_br_fiscal.tax"].search(
+            [
+                ("tax_group_id", "=", self.env.ref("l10n_br_fiscal.tax_group_ibs").id),
+                ("percent_amount", "=", ibs_percent),
+            ],
+            limit=1,
+        )
+        if ibs_tax:
+            odoo_attrs["ibs_tax_id"] = ibs_tax.id
+            if not odoo_attrs.get("fiscal_tax_ids"):
+                odoo_attrs["fiscal_tax_ids"] = []
+            odoo_attrs["fiscal_tax_ids"].append(ibs_tax.id)
+
+        # Find CBS tax
+        cbs_tax = self.env["l10n_br_fiscal.tax"].search(
+            [
+                ("tax_group_id", "=", self.env.ref("l10n_br_fiscal.tax_group_cbs").id),
+                ("percent_amount", "=", cbs_percent),
+            ],
+            limit=1,
+        )
+        if cbs_tax:
+            odoo_attrs["cbs_tax_id"] = cbs_tax.id
+            if not odoo_attrs.get("fiscal_tax_ids"):
+                odoo_attrs["fiscal_tax_ids"] = []
+            odoo_attrs["fiscal_tax_ids"].append(cbs_tax.id)
 
     def _verify_related_many2ones(self, related_many2ones):
         if (
