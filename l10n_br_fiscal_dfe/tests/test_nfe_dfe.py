@@ -38,19 +38,51 @@ class TestNFeDFe(TransactionCase):
         _mock_post.return_value = _bytes(response_sucesso_individual)
 
         self.company.dfe_search_documents()
-        dfe_docs = self.env["l10n_br_fiscal_dfe.document"].search(
-            [("company_id", "=", self.company.id)]
+        access_key = "35200159594315000157550010000000012062777161"
+        doc = self.env["l10n_br_fiscal_dfe.document"].search(
+            [("company_id", "=", self.company.id), ("access_key", "=", access_key)]
         )
-        for doc in dfe_docs:
-            doc.import_document()
+        self.assertTrue(doc)
+
+        # Import button now opens the standard NFe import wizard, pre-filled
+        # with the DF-e XML, instead of importing straight away.
+        action = doc.import_document()
+        self.assertEqual(action["res_model"], "l10n_br_fiscal.document.import.wizard")
+        context = action["context"]
+        self.assertEqual(context["dfe_document_id"], doc.id)
+
+        wizard = (
+            self.env["l10n_br_fiscal.document.import.wizard"]
+            .with_context(**context)
+            .create(
+                {
+                    "file": context["default_file"],
+                    "company_id": context["default_company_id"],
+                }
+            )
+        )
+        wizard._onchange_file()
+        wizard.fiscal_operation_id = self.env.ref("l10n_br_fiscal.fo_compras")
+        result = wizard.action_import_and_open_document()
 
         self.assertEqual(len(self._search_dfe()), 1)
-        access_key = "35200159594315000157550010000000012062777161"
+        self.assertEqual(result["res_model"], "l10n_br_fiscal.document")
         fiscal_doc = self.env["l10n_br_fiscal.document"].search(
             [("document_key", "=", access_key)], limit=1
         )
         self.assertTrue(fiscal_doc, "Fiscal document should be created after import")
         self.assertEqual(fiscal_doc.document_key, access_key)
+        self.assertEqual(
+            doc.imported_document_id,
+            fiscal_doc,
+            "DF-e document should be linked back to the imported fiscal document",
+        )
+
+        # A second import should just reopen the already-imported document.
+        reopen_action = doc.import_document()
+        self.assertEqual(reopen_action["res_model"], "l10n_br_fiscal.document")
+        self.assertEqual(reopen_action["res_id"], fiscal_doc.id)
+
         self.assertEqual(_mock_post.call_count, 1)
 
     @mock.patch.object(DefaultTransport, "post")
