@@ -108,6 +108,22 @@ class L10nBrFiscalDfeDocument(models.Model):
         help="True when the emitter CNPJ in the access key matches the company CNPJ.",
     )
 
+    imported_document_id = fields.Many2one(
+        comodel_name="l10n_br_fiscal.document",
+        string="Imported Fiscal Document",
+        compute="_compute_imported_document_id",
+        store=True,
+        help="Fiscal document created by importing this DF-e, if any.",
+    )
+
+    @api.depends("access_key")
+    def _compute_imported_document_id(self):
+        FiscalDocument = self.env["l10n_br_fiscal.document"]
+        for record in self:
+            record.imported_document_id = FiscalDocument.search(
+                [("document_key", "=", record.access_key)], limit=1
+            )
+
     @api.depends("access_key")
     def _compute_partner_id(self):
         Partner = self.env["res.partner"]
@@ -309,6 +325,10 @@ class L10nBrFiscalDfeDocument(models.Model):
         }
 
     def import_document(self):
+        self.ensure_one()
+        if self.imported_document_id:
+            return self._action_open_imported_document()
+
         complete_dfe = self.dfe_ids.filtered(
             lambda dfe: dfe.dfe_nfe_document_type == "dfe_nfe_complete"
         )[:1]
@@ -316,17 +336,27 @@ class L10nBrFiscalDfeDocument(models.Model):
             raise UserError(
                 _("You can only import the NF-e when the DF-e is completed.")
             )
-        xml_bytes = base64.b64decode(
-            complete_dfe.attachment_id.with_context(bin_size=False).datas
-        )
-        xml_stream = BytesIO(xml_bytes)
-        parse_method_name = f"parse_{complete_dfe.schema_type}"
-        parse_method = getattr(self.company_id, parse_method_name, None)
-        if not parse_method:
-            raise UserError(
-                _(
-                    "No import method available for schema type '%(schema)s'.",
-                    schema=complete_dfe.schema_type,
-                )
-            )
-        return parse_method(xml_stream)
+        return {
+            "name": _("Import NF-e XML"),
+            "type": "ir.actions.act_window",
+            "res_model": "l10n_br_fiscal.document.import.wizard",
+            "view_mode": "form",
+            "target": "new",
+            "context": {
+                "default_file": complete_dfe.attachment_id.with_context(
+                    bin_size=False
+                ).datas,
+                "default_company_id": self.company_id.id,
+                "dfe_document_id": self.id,
+            },
+        }
+
+    def _action_open_imported_document(self):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "res_model": "l10n_br_fiscal.document",
+            "res_id": self.imported_document_id.id,
+            "view_mode": "form",
+            "target": "current",
+        }

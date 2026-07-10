@@ -7,7 +7,6 @@ import re
 from datetime import datetime, timezone
 
 from lxml import objectify
-from nfelib.nfe.bindings.v4_0.leiaute_nfe_v4_00 import TnfeProc
 from nfelib.nfe.client.v4_0.dfe import DfeClient
 
 from odoo import _, api, fields, models
@@ -652,8 +651,3 @@ class ResCompany(models.Model):
                 vals["document_number"] = key[25:34].lstrip("0") or "0"
             document = Document.create(vals)
         return document
-
-    @api.model
-    def parse_procNFe(self, xml):
-        binding = TnfeProc.from_xml(xml.read().decode())
-        return self.env["l10n_br_fiscal.document"].import_binding_nfe(binding)
