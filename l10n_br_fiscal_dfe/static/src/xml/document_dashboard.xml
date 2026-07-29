@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+    <t t-name="l10n_br_fiscal_dfe.DfeDocumentDashboard">
+        <div class="o_dfe_document_dashboard h-100 d-flex flex-column">
+            <div t-on-click="handleActionLinks" t-out="state.bannerHtml" />
+            <View t-props="viewProps" />
+        </div>
+    </t>
+</templates>

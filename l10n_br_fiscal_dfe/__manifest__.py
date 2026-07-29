@@ -31,6 +31,12 @@
         # Wizards
         "wizards/specific_search_wizard.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "l10n_br_fiscal_dfe/static/src/js/document_dashboard.esm.js",
+            "l10n_br_fiscal_dfe/static/src/xml/document_dashboard.xml",
+        ],
+    },
     "external_dependencies": {
         "python": [
             "brazil_fiscal_client",

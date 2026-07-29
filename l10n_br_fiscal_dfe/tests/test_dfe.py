@@ -757,7 +757,7 @@ class TestDFe(TransactionCase):
         partner = self.env["res.partner"].create(
             {
                 "name": "Late Partner DFe",
-                "cnpj_cpf": "12.345.678/0001-95",
+                "vat": "12.345.678/0001-95",
             }
         )
         dfe_doc.action_match_partner()
@@ -845,8 +845,7 @@ class TestDFe(TransactionCase):
                 "message": "Test log",
             }
         )
-        name = log.name_get()[0][1]
-        self.assertIn("Success", name)
+        self.assertIn("Success", log.display_name)
 
     # ── DFe document compute tests ────────────────────────────────────────
 
@@ -1156,7 +1155,7 @@ class TestDFe(TransactionCase):
                 "res_id": dfe.id,
             }
         )
-        doc.invalidate_cache(["cfop_ids"])
+        doc.invalidate_recordset(["cfop_ids"])
         self.assertFalse(doc.cfop_ids)
 
     def test_cfop_ids_complete_dfe_without_attachment(self):
@@ -1176,7 +1175,7 @@ class TestDFe(TransactionCase):
                 "schema_type": "procNFe",
             }
         )
-        doc.invalidate_cache(["cfop_ids"])
+        doc.invalidate_recordset(["cfop_ids"])
         self.assertFalse(doc.cfop_ids)
 
     def test_make_pdf_without_complete_dfe(self):
@@ -1363,8 +1362,7 @@ class TestDFe(TransactionCase):
                 "company_id": self.company.id,
             }
         )
-        name = dfe.name_get()[0][1]
-        self.assertIn("35200199999999999999550010000000019999999991", name)
+        self.assertIn("35200199999999999999550010000000019999999991", dfe.display_name)
 
     # ── Coverage: notify fallback URL ────────────────────────────────────
 

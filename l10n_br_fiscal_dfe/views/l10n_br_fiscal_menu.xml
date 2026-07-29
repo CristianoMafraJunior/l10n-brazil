@@ -14,7 +14,7 @@
     />
     <menuitem
         id="dfe_document_menu"
-        action="dfe_document_action"
+        action="dfe_document_dashboard_action"
         name="Third-party NF-e"
         parent="dfe_queries_menu"
         sequence="10"
