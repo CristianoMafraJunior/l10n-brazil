@@ -5,3 +5,5 @@ nfelib
 Setuptools<81
 signxml==3.2.2
 xmldiff
+pyOpenSSL==23.3.0
+cryptography==41.0.7
