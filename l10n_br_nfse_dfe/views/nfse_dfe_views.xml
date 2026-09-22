@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Copyright 2026 Engenere (<https://engenere.one>)
+    License AGPL-3 or later (http://www.gnu.org/licenses/agpl)
+-->
+<odoo>
+    <!-- Same generic tree as l10n_br_fiscal_dfe, just wired to the
+         NFS-e banner route so the "Search All / Specific Search"
+         buttons and status tiles show up. -->
+    <record model="ir.ui.view" id="nfse_dfe_document_tree">
+        <field name="name">l10n_br_fiscal_dfe.document.tree.nfse</field>
+        <field name="model">l10n_br_fiscal_dfe.document</field>
+        <field
+            name="inherit_id"
+            ref="l10n_br_fiscal_dfe.l10n_br_fiscal_dfe_document_tree"
+        />
+        <field name="priority">10</field>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute
+                    name="banner_route"
+                >/l10n_br_fiscal_dfe/document_banner/nfse</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_nfse_dfe_document" model="ir.actions.act_window">
+        <field name="name">NFS-e de Terceiros</field>
+        <field name="res_model">l10n_br_fiscal_dfe.document</field>
+        <field name="view_mode">tree,form</field>
+        <field
+            name="domain"
+        >[('fiscal_type', '=', 'nfse'), ('is_own_document', '=', False)]</field>
+        <field name="context">{'default_fiscal_type': 'nfse'}</field>
+        <field
+            name="view_ids"
+            eval="[(5, 0, 0),
+                   (0, 0, {'view_mode': 'tree',
+                           'view_id': ref('nfse_dfe_document_tree')}),
+                   (0, 0, {'view_mode': 'form',
+                           'view_id': ref('l10n_br_fiscal_dfe.l10n_br_fiscal_dfe_document_form')})]"
+        />
+    </record>
+
+    <menuitem
+        id="menu_l10n_br_nfse_dfe_document"
+        name="NFS-e de Terceiros"
+        action="action_nfse_dfe_document"
+        parent="l10n_br_fiscal_dfe.menu_l10n_br_fiscal_dfe_root"
+        sequence="20"
+    />
+</odoo>
