@@ -21,6 +21,11 @@ class L10nBrFiscalDfeDocument(models.Model):
     # chars, caught only against real production data).
     access_key = models.fields.Char(required=True, index=True, size=None)
 
+    # Same story as access_key: serie is size=3 on the base model
+    # (NF-e series are always up to 3 digits). NFS-e Nacional's DPS
+    # <serie> is confirmed 5 digits (e.g. "45000") on a real document.
+    serie = models.fields.Char(size=None)
+
 
 class L10nBrFiscalDfeDfe(models.Model):
     _inherit = "l10n_br_fiscal_dfe.dfe"

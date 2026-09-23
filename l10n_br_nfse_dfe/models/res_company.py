@@ -7,6 +7,7 @@ response (2026-09-22) vs. what's still a ``TODO(adn)`` guess.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from lxml import etree
 
@@ -16,6 +17,7 @@ from odoo.addons.l10n_br_fiscal_dfe.constants.dfe import (
     DFE_ENVIRONMENT_DEFAULT,
     DFE_ENVIRONMENTS,
 )
+from odoo.addons.l10n_br_fiscal_dfe.tools import utils
 
 from .adn_dfe_client import AdnDfeClient
 
@@ -30,6 +32,15 @@ _logger = logging.getLogger(__name__)
 _ACCESS_KEY_ROOT_TAG = "infNFSe"
 _ACCESS_KEY_ID_PREFIX = "NFS"
 _ACCESS_KEY_MIN_LENGTH = 40
+
+# Confirmed live (2026-09-22) against the same real document: field
+# paths below are namespace-agnostic descents from the root <NFSe>
+# through local element names, e.g. ("infNFSe", "emit", "xNome") for
+# <infNFSe><emit><xNome>. There's also a <prest> (provider) and a
+# <toma> (taker) block with their own xNome/CNPJ inside <DPS><infDPS>
+# — deliberately NOT using those, only <emit>, which is the actual
+# document issuer regardless of which side (provider or taker) our
+# company is on.
 
 
 class ResCompany(models.Model):
@@ -141,6 +152,9 @@ class ResCompany(models.Model):
         if access_key:
             dfe_document = self._dfe_get_or_create_document(access_key, fiscal_type)
             dfe_document.sudo().dfe_ids = [(4, dfe_record.id)]
+            metadata = self._nfse_extract_metadata(root)
+            if metadata:
+                dfe_document._update_metadata(metadata, is_complete=True)
         else:
             _logger.warning(
                 "NFS-e DF-e: could not find an access key in the payload "
@@ -170,3 +184,83 @@ class ResCompany(models.Model):
         except Exception:
             _logger.exception("NFS-e DF-e: error looking for the access key")
         return None
+
+    @staticmethod
+    def _nfse_child_by_path(root, *local_names):
+        """Namespace-agnostic descent through a chain of child local
+        names, e.g. ``_nfse_child_by_path(root, "infNFSe", "emit",
+        "xNome")`` for ``<infNFSe><emit><xNome>``. Only ever follows
+        *direct* children at each step, so it can't accidentally match
+        a same-named element nested somewhere else in the document
+        (e.g. <toma><xNome> or <prest><xNome> instead of <emit><xNome>).
+        """
+        current = root
+        for local_name in local_names:
+            found = None
+            # NOTE: ``for child in current`` (plain __iter__) is NOT the
+            # same as "direct children" on an lxml.objectify element —
+            # objectify overrides it to walk same-tag *siblings*
+            # instead, so on a root/unique element it yields just the
+            # element itself and nothing underneath (caught 2026-09-23:
+            # every metadata field silently came back empty). Use
+            # iterchildren(), which objectify does NOT override.
+            for child in current.iterchildren():
+                if (
+                    isinstance(child.tag, str)
+                    and etree.QName(child).localname == local_name
+                ):
+                    found = child
+                    break
+            if found is None:
+                return None
+            current = found
+        return current
+
+    def _nfse_child_text(self, root, *local_names):
+        el = self._nfse_child_by_path(root, *local_names)
+        if el is None or not el.text:
+            return None
+        return el.text.strip()
+
+    def _nfse_extract_metadata(self, root):
+        """Best-effort display metadata for the grouping ``.document``
+        record — NOT a fiscal import. Confirmed against one real
+        document (2026-09-22); still just one sample, so treat any
+        field this doesn't manage to extract as a soft failure (skip
+        it) rather than raising."""
+        vals = {}
+        try:
+            xnome = self._nfse_child_text(root, "infNFSe", "emit", "xNome")
+            if xnome:
+                vals["emitter"] = xnome
+
+            cnpj = self._nfse_child_text(root, "infNFSe", "emit", "CNPJ")
+            if cnpj:
+                vals["vat"] = utils.mask_cnpj(cnpj)
+
+            nnfse = self._nfse_child_text(root, "infNFSe", "nNFSe")
+            if nnfse:
+                vals["document_number"] = nnfse
+
+            vliq = self._nfse_child_text(root, "infNFSe", "valores", "vLiq")
+            if vliq:
+                vals["document_amount"] = float(vliq)
+
+            cstat = self._nfse_child_text(root, "infNFSe", "cStat")
+            if cstat:
+                vals["document_state"] = cstat
+
+            serie = self._nfse_child_text(root, "infNFSe", "DPS", "infDPS", "serie")
+            if serie:
+                vals["serie"] = serie
+
+            dh_emi = self._nfse_child_text(root, "infNFSe", "DPS", "infDPS", "dhEmi")
+            if dh_emi:
+                vals["document_emission_date"] = (
+                    datetime.fromisoformat(dh_emi)
+                    .astimezone(timezone.utc)
+                    .replace(tzinfo=None)
+                )
+        except (ValueError, TypeError):
+            _logger.exception("NFS-e DF-e: error extracting document metadata")
+        return vals

@@ -49,6 +49,41 @@ def _real_shaped_xml(access_key="3" * 50, body="<xLocEmi>MOCK</xLocEmi>"):
     )
 
 
+def _real_shaped_xml_with_metadata(
+    access_key="3" * 50,
+    emitter_name="EMPRESA TESTE LTDA",
+    emitter_cnpj="21990799000180",
+    document_number="2300000000054",
+    amount="269.90",
+    cstat="100",
+    serie="45000",
+    dh_emi="2023-01-11T00:00:00-03:00",
+):
+    """Same structure as the real document confirmed live on
+    2026-09-22 (trimmed to just the fields the module extracts) —
+    including a <prest><xNome> and <toma><xNome> with DIFFERENT names
+    than <emit><xNome>, to make sure metadata extraction reads from
+    the right element and not just "the first xNome it finds"."""
+    return (
+        '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+        f'<infNFSe Id="NFS{access_key}">'
+        f"<nNFSe>{document_number}</nNFSe>"
+        f"<cStat>{cstat}</cStat>"
+        f"<emit><CNPJ>{emitter_cnpj}</CNPJ><xNome>{emitter_name}</xNome></emit>"
+        f"<valores><vLiq>{amount}</vLiq></valores>"
+        "<DPS>"
+        "<infDPS>"
+        f"<dhEmi>{dh_emi}</dhEmi>"
+        f"<serie>{serie}</serie>"
+        "<prest><xNome>NOT THE EMITTER</xNome></prest>"
+        "<toma><xNome>NOT THE EMITTER EITHER</xNome></toma>"
+        "</infDPS>"
+        "</DPS>"
+        "</infNFSe>"
+        "</NFSe>"
+    )
+
+
 def _lote_item(nsu, xml_content="<NFSe>mock</NFSe>", access_key=None):
     """Real shape confirmed live for a LoteDFe entry."""
     return {
@@ -341,6 +376,35 @@ class TestResCompanyNfseDfe(TransactionCase):
         )
         self.assertTrue(document, "document should be grouped by the found access key")
         self.assertIn(dfe_record, document.dfe_ids)
+
+    @mock.patch.object(requests.Session, "get")
+    def test_search_documents_extracts_display_metadata(self, mock_get):
+        """The document's Valor/Emitente columns shouldn't stay blank —
+        extract them from the same fields confirmed on a real document
+        (caught 2026-09-22: everything showed 0,00/empty because this
+        wasn't implemented yet)."""
+        access_key = "4" * 50
+        xml = _real_shaped_xml_with_metadata(access_key=access_key)
+        mock_get.side_effect = [
+            _found_response(1, xml),
+            _not_found_response(),
+        ]
+
+        self.company.nfse_dfe_search_documents()
+
+        document = self.env["l10n_br_fiscal_dfe.document"].search(
+            [("access_key", "=", access_key)]
+        )
+        self.assertTrue(document)
+        self.assertEqual(document.emitter, "EMPRESA TESTE LTDA")
+        self.assertEqual(document.vat, "21.990.799/0001-80")
+        self.assertEqual(document.document_number, "2300000000054")
+        self.assertAlmostEqual(document.document_amount, 269.90)
+        self.assertEqual(document.document_state, "100")
+        self.assertEqual(document.serie, "45000")
+        self.assertEqual(document.document_emission_date.year, 2023)
+        self.assertEqual(document.document_emission_date.month, 1)
+        self.assertEqual(document.document_emission_date.day, 11)
 
     @mock.patch.object(requests.Session, "get")
     def test_search_documents_without_access_key_stays_ungrouped(self, mock_get):
