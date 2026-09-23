@@ -26,9 +26,23 @@ real A1 certificate:
   - Documents (when found) travel in the ``LoteDFe`` list — so a
     single call may return more than one document, more like SEFAZ's
     NF-e distribution than we originally assumed from the manual's
-    wording. We still haven't seen a non-empty ``LoteDFe`` (no real
-    documents to query against in this test), so the shape of each
-    item inside it is still a ``TODO(adn)`` guess.
+    wording. Confirmed against a real document on 2026-09-22, a
+    ``LoteDFe`` entry looks like::
+
+        {
+          "NSU": 2,
+          "ChaveAcesso": "<50-digit access key>",
+          "TipoDocumento": "NFSE",
+          "ArquivoXml": "<gzip+base64 XML, same as SEFAZ's docZip>",
+          "DataHoraGeracao": "2023-01-11T10:36:34.393"
+        }
+
+  - The decoded XML root is ``<NFSe xmlns="http://www.sped.fazenda
+    .gov.br/nfse">`` — there is NO dedicated "chave de acesso" element.
+    The key only appears embedded in the root ``<infNFSe Id="NFS
+    <chave>">`` attribute (same "3-letter prefix + key" convention
+    NF-e uses: ``NFe<chave>``) and as free text inside ``<xOutInf>``.
+    See ``_nfse_find_access_key`` in ``res_company.py``.
   - A ``cnpjConsulta`` query param does exist, but sending it when it
     doesn't share the certificate's CNPJ *root* fails with HTTP 400 and
     ``Erros[0].Codigo == "E2243"``. It's only for matriz/filial lookups
@@ -38,8 +52,7 @@ real A1 certificate:
     ``consultar_distribuicao``.
 
 Everything still marked ``TODO(adn)`` below has NOT been confirmed —
-in particular the shape of a ``LoteDFe`` entry, and the pagination
-semantics once a NSU actually returns documents.
+mainly the pagination semantics once ADN's own numbering has gaps.
 """
 
 import base64
@@ -168,14 +181,20 @@ class AdnDfeClient:
         return resp.json()
 
     def _payload_to_doczips(self, payload):
-        """TODO(adn): confirmed the documents live under ``LoteDFe``
-        (a list), but never seen a non-empty one — the field names
-        below for each entry (``NSU``/``Documento``/``Xml``) are still
-        a guess, not confirmed against a real item."""
+        """Confirmed live (2026-09-22): each ``LoteDFe`` entry has
+        ``NSU``, ``ChaveAcesso``, ``TipoDocumento`` and ``ArquivoXml``
+        (gzip+base64, same as SEFAZ's docZip). ``Documento``/``Xml``
+        are kept as fallbacks only in case some document type/version
+        uses different field names — not confirmed themselves."""
         doc_zips = []
         for item in payload.get("LoteDFe") or []:
             nsu = item.get("NSU") or item.get("Nsu")
-            xml_b64 = item.get("Documento") or item.get("Xml") or item.get("documento")
+            xml_b64 = (
+                item.get("ArquivoXml")
+                or item.get("Documento")
+                or item.get("Xml")
+                or item.get("documento")
+            )
             if not xml_b64:
                 raise UserError(
                     _(

@@ -1,9 +1,9 @@
 # Copyright 2026 Engenere (<https://engenere.one>)
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
-"""DRAFT: NFS-e implementation of the generic DF-e distribution engine.
+"""NFS-e implementation of the generic DF-e distribution engine.
 
-See ``adn_dfe_client.py`` for the parts of this integration that are
-still guesses pending validation against the real ADN Swagger.
+See ``adn_dfe_client.py`` for what's confirmed against a real ADN
+response (2026-09-22) vs. what's still a ``TODO(adn)`` guess.
 """
 
 import logging
@@ -21,14 +21,14 @@ from .adn_dfe_client import AdnDfeClient
 
 _logger = logging.getLogger(__name__)
 
-# TODO(adn): namespace-agnostic, best-effort candidates for the access
-# key element in the NFS-e Nacional XML — we don't have the real XSD.
-# Every other document type in this ecosystem (NF-e, CT-e, MDF-e) names
-# it "ch<Doc>" (chNFe, chCTe, chMDFe...), not the full word "chave", so
-# that's the primary hint; "chave" is kept as a secondary fallback for
-# more verbose naming. Replace with a proper lookup (ideally via
-# nfelib.nfse bindings) once the schema is confirmed.
-_ACCESS_KEY_HINTS = ("ch", "chave")
+# Confirmed live (2026-09-22) against a real NFS-e Nacional document:
+# there is NO dedicated "chave de acesso" element. The root element is
+# <infNFSe Id="NFS<chave>"> — the same "3-letter prefix + key"
+# convention NF-e uses (<infNFe Id="NFe<chave>">). The key also shows
+# up as free text inside <xOutInf>, but the Id attribute is structured
+# and reliable, so that's what we parse.
+_ACCESS_KEY_ROOT_TAG = "infNFSe"
+_ACCESS_KEY_ID_PREFIX = "NFS"
 _ACCESS_KEY_MIN_LENGTH = 40
 
 
@@ -125,12 +125,19 @@ class ResCompany(models.Model):
         the same ungrouped behavior the generic engine's own fallback
         already has.
         """
-        DfeRecord = self.env["l10n_br_fiscal_dfe.dfe"].sudo()
-        dfe_record = DfeRecord.create(
-            {"nsu": nsu, "company_id": self.id, "fiscal_type": fiscal_type}
-        )
-
         access_key = self._nfse_find_access_key(root)
+
+        vals = {"nsu": nsu, "company_id": self.id, "fiscal_type": fiscal_type}
+        if access_key:
+            # ADN's DFe always carries the full signed NFS-e (there's no
+            # "resumo"/summary counterpart like NF-e's resNFe), so this
+            # is always a "complete" document.
+            vals["access_key"] = access_key
+            vals["document_type_dfe"] = "complete"
+
+        DfeRecord = self.env["l10n_br_fiscal_dfe.dfe"].sudo()
+        dfe_record = DfeRecord.create(vals)
+
         if access_key:
             dfe_document = self._dfe_get_or_create_document(access_key, fiscal_type)
             dfe_document.sudo().dfe_ids = [(4, dfe_record.id)]
@@ -150,16 +157,16 @@ class ResCompany(models.Model):
             for el in root.iter():
                 if not isinstance(el.tag, str):
                     continue
-                local_name = etree.QName(el).localname.lower()
-                is_candidate = (
-                    local_name.startswith(_ACCESS_KEY_HINTS[0])
-                    or _ACCESS_KEY_HINTS[1] in local_name
-                )
-                if not is_candidate:
+                if etree.QName(el).localname != _ACCESS_KEY_ROOT_TAG:
                     continue
-                text = (el.text or "").strip()
-                if text.isdigit() and len(text) >= _ACCESS_KEY_MIN_LENGTH:
-                    return text
+                id_attr = el.get("Id") or ""
+                digits = (
+                    id_attr[len(_ACCESS_KEY_ID_PREFIX) :]
+                    if id_attr.upper().startswith(_ACCESS_KEY_ID_PREFIX)
+                    else id_attr
+                )
+                if digits.isdigit() and len(digits) >= _ACCESS_KEY_MIN_LENGTH:
+                    return digits
         except Exception:
             _logger.exception("NFS-e DF-e: error looking for the access key")
         return None

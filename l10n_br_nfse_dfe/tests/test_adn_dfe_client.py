@@ -5,12 +5,11 @@
 These tests mock the HTTP transport (``requests.Session.get``) exactly
 like the existing NF-e test suite mocks ``DefaultTransport.post`` —
 they don't hit the real ADN, but the response shapes they mock are no
-longer guesses: they were confirmed on 2026-09-22 against a real
-``GET /contribuintes/DFe/{NSU}`` call to the homologação (produção
-restrita) environment with a real A1 certificate (see the module
-docstring in ``adn_dfe_client.py`` for exactly what was confirmed vs.
-what's still a ``TODO(adn)`` guess — mainly the shape of a *non-empty*
-``LoteDFe`` entry, since that live test never returned real documents).
+longer guesses: they were confirmed on 2026-09-22 against real
+``GET /contribuintes/DFe/{NSU}`` calls to the homologação (produção
+restrita) environment with a real A1 certificate, including one call
+that returned a real NFS-e document (see the module docstring in
+``adn_dfe_client.py`` for exactly what was confirmed).
 """
 
 import base64
@@ -39,8 +38,26 @@ def _gzip_base64(xml_str):
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _lote_item(nsu, xml_content="<NFSe>mock</NFSe>"):
-    return {"NSU": str(nsu), "Documento": _gzip_base64(xml_content)}
+def _real_shaped_xml(access_key="3" * 50, body="<xLocEmi>MOCK</xLocEmi>"):
+    """A minimal XML shaped like the real document confirmed live: the
+    access key lives in the root <infNFSe Id="NFS<chave>"> attribute,
+    not as a separate element."""
+    return (
+        '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+        f'<infNFSe Id="NFS{access_key}">{body}</infNFSe>'
+        "</NFSe>"
+    )
+
+
+def _lote_item(nsu, xml_content="<NFSe>mock</NFSe>", access_key=None):
+    """Real shape confirmed live for a LoteDFe entry."""
+    return {
+        "NSU": nsu,
+        "ChaveAcesso": access_key or "",
+        "TipoDocumento": "NFSE",
+        "ArquivoXml": _gzip_base64(xml_content),
+        "DataHoraGeracao": "2026-09-22T00:00:00.000",
+    }
 
 
 def _found_payload(items):
@@ -292,7 +309,7 @@ class TestResCompanyNfseDfe(TransactionCase):
         the downloaded document under a ``l10n_br_fiscal_dfe.document``
         (not just leave a bare, ungrouped ``.dfe`` record)."""
         access_key = "3" * 50
-        xml = f"<NFSe><chNFSe>{access_key}</chNFSe></NFSe>"
+        xml = _real_shaped_xml(access_key)
         mock_get.side_effect = [
             _found_response(1, xml),
             _not_found_response(),
@@ -311,6 +328,13 @@ class TestResCompanyNfseDfe(TransactionCase):
         self.assertTrue(dfe_record)
         self.assertEqual(dfe_record.schema_type, "NFSe")
         self.assertTrue(dfe_record.attachment_id)
+        # Regression check: the dfe record's own access_key/document_type_dfe
+        # must be set too, not just the parent document's — otherwise the
+        # XML attachment filename ends up literally named "NFSe_False.xml"
+        # (caught against a real production document on 2026-09-22).
+        self.assertEqual(dfe_record.access_key, access_key)
+        self.assertEqual(dfe_record.document_type_dfe, "complete")
+        self.assertIn(access_key, dfe_record.attachment_id.name)
 
         document = self.env["l10n_br_fiscal_dfe.document"].search(
             [("access_key", "=", access_key)]

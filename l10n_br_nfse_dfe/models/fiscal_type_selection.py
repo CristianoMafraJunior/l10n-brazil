@@ -10,17 +10,26 @@ class L10nBrFiscalDfeDocument(models.Model):
     fiscal_type = models.fields.Selection(selection_add=[("nfse", "NFS-e")])
 
     # access_key is size=44 on the base model (NF-e/CT-e keys are
-    # always 44 digits). NFS-e Nacional access keys are reportedly 50
-    # characters (per third-party integration docs, not the ADN manual
-    # itself) — drop the size constraint entirely rather than guess a
-    # possibly-wrong exact number; this doesn't affect NF-e records.
-    access_key = models.fields.Char(required=True, index=True)
+    # always 44 digits). NFS-e Nacional access keys are confirmed 50
+    # characters (seen live, 2026-09-22, on a real production document)
+    # — drop the size constraint entirely rather than hardcode 50; this
+    # doesn't affect NF-e records. IMPORTANT: `size=None` must be passed
+    # *explicitly* — omitting the kwarg does NOT reset it, Odoo's field
+    # merging across `_inherit` keeps the base class's size=44 unless
+    # a module in the chain explicitly overrides it (learned the hard
+    # way: omitting it here silently truncated every NFS-e key to 44
+    # chars, caught only against real production data).
+    access_key = models.fields.Char(required=True, index=True, size=None)
 
 
 class L10nBrFiscalDfeDfe(models.Model):
     _inherit = "l10n_br_fiscal_dfe.dfe"
 
     fiscal_type = models.fields.Selection(selection_add=[("nfse", "NFS-e")])
+
+    # Same truncation issue as l10n_br_fiscal_dfe.document.access_key
+    # above — this is the OTHER model with a 44-char access_key.
+    access_key = models.fields.Char(index=True, size=None)
 
 
 class L10nBrFiscalDfeDistributionLog(models.Model):
