@@ -177,11 +177,15 @@ class TestAdnDfeClient(TransactionCase):
 
     # ── Pagination mode (ultimo_nsu) ─────────────────────────────────
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 3
+    )
     @mock.patch.object(requests.Session, "get")
-    def test_pagination_finds_one_document_then_stops(self, mock_get):
+    def test_pagination_finds_one_document_then_exhausts_attempts(self, mock_get):
         self.company.nfse_environment = "2"
         mock_get.side_effect = [
             _found_response(1, "<NFSe>doc-1</NFSe>"),
+            _not_found_response(),
             _not_found_response(),
         ]
 
@@ -192,16 +196,56 @@ class TestAdnDfeClient(TransactionCase):
 
         self.assertEqual(result.resposta.cStat, "138")
         self.assertEqual(len(result.resposta.loteDistDFeInt.docZip), 1)
-        self.assertEqual(result.resposta.ultNSU, utils.format_nsu("1"))
+        # ultNSU must be the LAST NSU CHECKED (3), not the last one
+        # found (1) — see test_pagination_walks_through_gap below for
+        # why this matters.
+        self.assertEqual(result.resposta.ultNSU, utils.format_nsu("3"))
         self.assertEqual(result.resposta.maxNSU, result.resposta.ultNSU)
-        self.assertEqual(mock_get.call_count, 2)
+        self.assertEqual(mock_get.call_count, 3)
 
         doc_zip = result.resposta.loteDistDFeInt.docZip[0]
         with gzip.GzipFile(fileobj=BytesIO(doc_zip.value)) as gz:
             self.assertIn(b"doc-1", gz.read())
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 4
+    )
     @mock.patch.object(requests.Session, "get")
-    def test_pagination_no_documents_returns_137(self, mock_get):
+    def test_pagination_walks_through_gap_to_find_later_document(self, mock_get):
+        """Regression test for the real bug found 2026-09-23: a real
+        production company had NSU 53-60 (8 consecutive values) with
+        no document, but plenty more documents past NSU 60. Stopping
+        at the first miss (the original design) permanently stalled
+        the sync the moment it hit that gap — nfse_last_nsu stayed
+        frozen even after 100+ more documents existed."""
+        self.company.nfse_environment = "2"
+        mock_get.side_effect = [
+            _not_found_response(),  # nsu 1 — gap
+            _not_found_response(),  # nsu 2 — gap
+            _not_found_response(),  # nsu 3 — gap
+            _found_response(4, "<NFSe>after-gap</NFSe>"),  # nsu 4 — found
+        ]
+
+        client = AdnDfeClient(self.company)
+        result = client.consultar_distribuicao(
+            cnpj_cpf="12345678000190", ultimo_nsu="000000000000000"
+        )
+
+        self.assertEqual(result.resposta.cStat, "138")
+        self.assertEqual(len(result.resposta.loteDistDFeInt.docZip), 1)
+        self.assertEqual(result.resposta.ultNSU, utils.format_nsu("4"))
+        self.assertEqual(mock_get.call_count, 4)
+
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 3
+    )
+    @mock.patch.object(requests.Session, "get")
+    def test_pagination_no_documents_advances_nsu_past_attempts(self, mock_get):
+        """Regression test: ultNSU must advance past the starting NSU
+        even when nothing at all is found — the old behavior (never
+        advancing on a miss) is exactly what froze nfse_last_nsu at 1
+        forever on real production data (2026-09-23), since every
+        subsequent poll just re-tried the same already-empty NSU."""
         self.company.nfse_environment = "2"
         mock_get.return_value = _not_found_response()
 
@@ -212,7 +256,8 @@ class TestAdnDfeClient(TransactionCase):
 
         self.assertEqual(result.resposta.cStat, "137")
         self.assertFalse(result.resposta.loteDistDFeInt.docZip)
-        mock_get.assert_called_once()
+        self.assertEqual(mock_get.call_count, 3)
+        self.assertEqual(result.resposta.ultNSU, utils.format_nsu("8"))
 
     @mock.patch.object(requests.Session, "get")
     def test_pagination_stops_at_page_size(self, mock_get):
@@ -227,6 +272,9 @@ class TestAdnDfeClient(TransactionCase):
         self.assertEqual(len(result.resposta.loteDistDFeInt.docZip), 50)
         self.assertEqual(mock_get.call_count, 50)
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 2
+    )
     @mock.patch.object(requests.Session, "get")
     def test_pagination_batch_per_call(self, mock_get):
         """A single call's LoteDFe can hold more than one document —
@@ -337,6 +385,9 @@ class TestResCompanyNfseDfe(TransactionCase):
         with self.assertRaises(NotImplementedError):
             self.company._dfe_get_processor("nfe")
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 2
+    )
     @mock.patch.object(requests.Session, "get")
     def test_search_documents_groups_under_document_by_access_key(self, mock_get):
         """Full round trip through the generic engine: ``_dfe_create_
@@ -352,7 +403,10 @@ class TestResCompanyNfseDfe(TransactionCase):
 
         self.company.nfse_dfe_search_documents()
 
-        self.assertEqual(self.company.nfse_last_nsu, utils.format_nsu("1"))
+        # ultNSU advances to the last NSU *checked* (2), not just found
+        # (1) — see the gap-tolerance regression tests in
+        # TestAdnDfeClient for why.
+        self.assertEqual(self.company.nfse_last_nsu, utils.format_nsu("2"))
         dfe_record = self.env["l10n_br_fiscal_dfe.dfe"].search(
             [
                 ("company_id", "=", self.company.id),
@@ -377,6 +431,9 @@ class TestResCompanyNfseDfe(TransactionCase):
         self.assertTrue(document, "document should be grouped by the found access key")
         self.assertIn(dfe_record, document.dfe_ids)
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 2
+    )
     @mock.patch.object(requests.Session, "get")
     def test_search_documents_extracts_display_metadata(self, mock_get):
         """The document's Valor/Emitente columns shouldn't stay blank —
@@ -406,6 +463,9 @@ class TestResCompanyNfseDfe(TransactionCase):
         self.assertEqual(document.document_emission_date.month, 1)
         self.assertEqual(document.document_emission_date.day, 11)
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 2
+    )
     @mock.patch.object(requests.Session, "get")
     def test_search_documents_without_access_key_stays_ungrouped(self, mock_get):
         """When the payload has no recognizable access key, the record
@@ -427,6 +487,9 @@ class TestResCompanyNfseDfe(TransactionCase):
         self.assertTrue(dfe_record)
         self.assertFalse(dfe_record.dfe_document_id)
 
+    @mock.patch(
+        "odoo.addons.l10n_br_nfse_dfe.models.adn_dfe_client.MAX_NSU_ATTEMPTS", 3
+    )
     @mock.patch.object(requests.Session, "get")
     def test_search_documents_no_docs_does_not_crash(self, mock_get):
         mock_get.return_value = _not_found_response()

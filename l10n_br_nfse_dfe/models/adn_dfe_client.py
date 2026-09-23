@@ -50,9 +50,17 @@ real A1 certificate:
     engine always passes a ``cnpj_cpf``, so sending it unconditionally
     broke the common case. We stopped sending it by default; see
     ``consultar_distribuicao``.
+  - ADN's NSU numbering has real gaps: confirmed live (2026-09-23) on a
+    production company with 101 real documents spanning NSU 2-110,
+    NSU 53-60 (8 consecutive values) never resolved to a document for
+    this CNPJ — presumably other tenants/event types consume slots in
+    what's likely a shared national counter. The original design
+    stopped walking at the first empty NSU, which is wrong for this
+    API: it permanently stalled the sync the first time a gap showed
+    up (``nfse_last_nsu`` stayed frozen even after 100+ more documents
+    existed past the gap). See ``_consultar_paginado``.
 
-Everything still marked ``TODO(adn)`` below has NOT been confirmed —
-mainly the pagination semantics once ADN's own numbering has gaps.
+Everything still marked ``TODO(adn)`` below has NOT been confirmed.
 """
 
 import base64
@@ -76,9 +84,18 @@ STATUS_NO_DOCS = "NENHUM_DOCUMENTO_LOCALIZADO"
 
 # TODO(adn): confirmed that a single call CAN return a list (LoteDFe),
 # but not confirmed whether ADN caps it, or at what size. We still cap
-# our own NSU walk at this many iterations per call, to keep each cron
-# tick bounded regardless.
+# our own NSU walk at this many DOCUMENTS FOUND per call, to keep each
+# cron tick bounded regardless.
 PAGE_SIZE = 50
+
+# Confirmed live (2026-09-23): ADN's NSU numbering has real gaps (8
+# consecutive missing values seen on a real company). This bounds how
+# many NSUs we'll walk *past* without finding anything before giving
+# up for this call — i.e. the gap tolerance — separately from PAGE_SIZE
+# (which caps documents *found*, not NSUs *checked*). Picked somewhat
+# arbitrarily at ~12x the largest gap we've actually observed; not
+# validated against a larger real gap.
+MAX_NSU_ATTEMPTS = 100
 
 REQUEST_TIMEOUT = 30
 
@@ -289,31 +306,36 @@ class AdnDfeClient:
     def _consultar_paginado(self, session, ultimo_nsu):
         """Pagination mode: walk NSU one by one. Each call may itself
         return several documents in ``LoteDFe`` (confirmed structurally,
-        though we've only ever seen it empty) — we collect across calls
-        until we hit PAGE_SIZE documents or run out of NSUs to try."""
+        though we've only ever seen more than one entry) — we collect
+        across NSUs until we hit PAGE_SIZE documents found or
+        MAX_NSU_ATTEMPTS NSUs checked, whichever comes first.
+
+        IMPORTANT: ``last_checked_nsu`` advances on every NSU we check,
+        found or not — earlier this only advanced on a *find*, which
+        seemed safer (never skip a "not yet filled" NSU) but turned out
+        to be wrong: ADN's numbering has real gaps (confirmed live,
+        2026-09-23), and stopping at the first miss permanently stalled
+        the sync the first time one showed up. Always advancing means
+        we walk straight through gaps up to MAX_NSU_ATTEMPTS per call,
+        and never get stuck re-checking the same range forever.
+        """
         doc_zips = []
         current_nsu = self._to_int_nsu(ultimo_nsu)
-        last_found_nsu = current_nsu
-        while len(doc_zips) < PAGE_SIZE:
+        last_checked_nsu = current_nsu
+        attempts = 0
+        while len(doc_zips) < PAGE_SIZE and attempts < MAX_NSU_ATTEMPTS:
             current_nsu += 1
+            attempts += 1
             payload = self._get_dfe(session, current_nsu)
+            last_checked_nsu = current_nsu
 
             if payload.get("StatusProcessamento") == STATUS_NO_DOCS:
-                # TODO(adn): confirm this really means "nothing here
-                # yet" rather than "end of the whole sequence" — if the
-                # numbering has gaps this stops the walk too early. We
-                # deliberately do NOT advance last_found_nsu past this
-                # point: if we did, a future document filling this NSU
-                # would be silently skipped on the next poll.
-                break
+                continue
 
             found = self._payload_to_doczips(payload)
-            if not found:
-                break
             doc_zips.extend(found)
-            last_found_nsu = current_nsu
 
-        last_nsu_str = str(last_found_nsu).zfill(15)
+        last_nsu_str = str(last_checked_nsu).zfill(15)
         if not doc_zips:
             return AdnWrappedResponse(
                 resposta=AdnResposta(
