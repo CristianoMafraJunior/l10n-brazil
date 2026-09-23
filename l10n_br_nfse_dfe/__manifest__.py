@@ -26,5 +26,11 @@
         "views/nfse_dfe_views.xml",
         "views/res_company_view.xml",
     ],
+    "external_dependencies": {
+        # Used to generate the DANFSe PDF (make_pdf), same library and
+        # pattern l10n_br_nfe_dfe already uses for the NF-e's DANFE.
+        # Validated live (2026-09-23) against a real document's XML.
+        "python": ["brazilfiscalreport"],
+    },
     "development_status": "Alpha",
 }

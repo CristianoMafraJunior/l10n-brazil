@@ -21,6 +21,14 @@
                     name="banner_route"
                 >/l10n_br_fiscal_dfe/document_banner/nfse</attribute>
             </xpath>
+            <xpath expr="//button[@name='action_download_xml']" position="after">
+                <button
+                    string="DANFSE"
+                    name="make_pdf"
+                    type="object"
+                    icon="fa-file-pdf-o"
+                />
+            </xpath>
         </field>
     </record>
 
