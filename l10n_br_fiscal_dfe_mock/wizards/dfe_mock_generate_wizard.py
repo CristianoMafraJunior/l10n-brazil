@@ -91,11 +91,17 @@ class DfeMockGenerateWizard(models.TransientModel):
         default=lambda self: self.env.company,
     )
     quantity = fields.Integer(default=5)
-    generate_res_nfe = fields.Boolean(default=True, string="Generate resNFe")
-    generate_proc_nfe = fields.Boolean(default=True, string="Generate procNFe")
-    generate_res_evento = fields.Boolean(default=False, string="Generate resEvento")
+    generate_res_nfe = fields.Boolean(default=True, string="Generate resNFe (NF-e)")
+    generate_proc_nfe = fields.Boolean(default=True, string="Generate procNFe (NF-e)")
+    generate_res_evento = fields.Boolean(
+        default=False, string="Generate resEvento (NF-e)"
+    )
     generate_proc_evento_nfe = fields.Boolean(
-        default=False, string="Generate procEventoNFe"
+        default=False, string="Generate procEventoNFe (NF-e)"
+    )
+    generate_res_nfse = fields.Boolean(default=False, string="Generate resNfse (NFS-e)")
+    generate_proc_nfse = fields.Boolean(
+        default=False, string="Generate procNfse (NFS-e)"
     )
 
     def _get_demo_partners(self):
@@ -204,7 +210,7 @@ class DfeMockGenerateWizard(models.TransientModel):
             "<xBairro>Centro</xBairro>"
             f"<cMun>{partner_data['uf_code']}00308</cMun>"
             "<xMun>Cidade Mock</xMun>"
-            f"<UF>SP</UF>"
+            "<UF>SP</UF>"
             "<CEP>01000000</CEP>"
             "<cPais>1058</cPais><xPais>BRASIL</xPais>"
             "</enderEmit>"
@@ -295,6 +301,209 @@ class DfeMockGenerateWizard(models.TransientModel):
             "</nfeProc>"
         )
 
+    def _build_res_nfse_xml(self, access_key, partner_data, emission_dt):
+        """Build a resNfse XML string."""
+        return (
+            '<resNfse xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+            f"<CNPJ>{partner_data['cnpj']}</CNPJ>"
+            f"<xNome>{partner_data['name']}</xNome>"
+            f"< inscricaoMunicipal>{partner_data['ie']}</ inscricaoMunicipal>"
+            f"< dhEmi>{emission_dt.strftime('%Y-%m-%dT%H:%M:%S')}-03:00</ dhEmi>"
+            "< tpEvento>1</ tpEvento>"
+            "< nNFSe>123456789012</ nNFSe>"
+            "< cMunicipio>3550308</ cMunicipio>"
+            "< cServico>01</ cServico>"
+            "< vServico>1000.00</ vServico>"
+            "< vTotal>1000.00</ vTotal>"
+            "< cTipoServico>01</ cTipoServico>"
+            "< cNaturezaJuridica>30</ cNaturezaJuridica>"
+            "< cRegimeEspecialTributacao>01</ cRegimeEspecialTributacao>"
+            "< cMunicipioLote>3550308</ cMunicipioLote>"
+            "< NrLote>1</ NrLote>"
+            "< StatusLote>2</ StatusLote>"
+            "</resNfse>"
+        )
+
+    def _build_proc_nfse_xml(self, access_key, partner_data, emission_dt):
+        """Build a procNfse XML string."""
+        return (
+            '<procNfse xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+            "<Numero>123456789012</Numero>"
+            f"<CNPJ>{partner_data['cnpj']}</CNPJ>"
+            f"<xMotivo>Ciencia da Operacao</xMotivo>"
+            f"< dhEmi>{emission_dt.strftime('%Y-%m-%dT%H:%M:%S')}-03:00</ dhEmi>"
+            "</procNfse>"
+        )
+
+    def action_generate(self):
+        self.ensure_one()
+        if self.quantity < 1:
+            raise UserError(_("Quantity must be at least 1."))
+
+        partners = self._get_demo_partners()
+        partner_list = list(partners)
+        starting_nsu = self._next_nsu(self.company_id)
+        now = datetime.now()
+
+        enabled_types = []
+        if self.generate_res_nfe:
+            enabled_types.append(("resNFe", "NF-e", "nfe"))
+        if self.generate_proc_nfe:
+            enabled_types.append(("procNFe", "NF-e", "nfe"))
+        if self.generate_res_evento:
+            enabled_types.append(("resEvento", "NF-e evento", "nfe"))
+        if self.generate_proc_evento_nfe:
+            enabled_types.append(("procEventoNFe", "NF-e evento", "nfe"))
+        if self.generate_res_nfse:
+            enabled_types.append(("resNfse", "NFS-e", "nfse"))
+        if self.generate_proc_nfse:
+            enabled_types.append(("procNfse", "NFS-e", "nfse"))
+
+        if not enabled_types:
+            raise UserError(_("Select at least one document type to generate."))
+
+        created_ids = []
+        nfe_keys = []  # Track keys for event generation
+        current_nsu = starting_nsu
+
+        # Generate NF-e types first (resNFe, procNFe, etc.)
+        for _idx in range(self.quantity):
+            partner = random.choice(partner_list)
+            partner_data = self._get_partner_data(partner)
+            emission_dt = now - timedelta(days=random.randint(1, 30))
+            amount = round(random.uniform(100, 50000), 2)
+            year_month = emission_dt.strftime("%y%m")
+            number = random.randint(1, 999999999)
+
+            # Generate access key for NF-e types (based on UF + CNPJ)
+            if any(t[2] == "nfe" for t in enabled_types):
+                # Find an NF-e enabled type to get uf_code and serie/number
+                nfe_types = [t for t in enabled_types if t[2] == "nfe"]
+                if nfe_types:
+                    target_type = nfe_types[0]
+                    access_key = _generate_access_key(
+                        partner_data["uf_code"],
+                        year_month,
+                        partner_data["cnpj"],
+                        1,
+                        number,
+                    )
+                    nfe_keys.append(access_key)
+                else:
+                    access_key = "3" * 44  # fallback
+            else:
+                access_key = "3" * 44  # fallback for non-NF-e
+
+            # Create records for all enabled types with this key/partner
+            for schema_type, display_name, fiscal_type in enabled_types:
+                nsu_str = str(current_nsu).zfill(15)
+
+                # Build XML based on fiscal type
+                if fiscal_type == "nfse":
+                    if schema_type.startswith("res"):
+                        xml = self._build_res_nfse_xml(
+                            access_key, partner_data, emission_dt
+                        )
+                    else:
+                        xml = self._build_proc_nfse_xml(
+                            access_key, partner_data, emission_dt
+                        )
+                else:  # nfe (default)
+                    if schema_type.startswith("proc"):
+                        xml = self._build_proc_nfe_xml(
+                            access_key, partner_data, amount, emission_dt
+                        )
+                    else:
+                        xml = self._build_res_nfe_xml(
+                            access_key, partner_data, amount, emission_dt
+                        )
+
+                record = self.env["dfe.mock.nsu"].create(
+                    {
+                        "nsu": nsu_str,
+                        "schema_type": schema_type,
+                        "xml_content": xml,
+                        "access_key": access_key,
+                        "company_id": self.company_id.id,
+                        "fiscal_type": fiscal_type,
+                    }
+                )
+                created_ids.append(record.id)
+                current_nsu += 1
+
+        # Generate event types referencing previously generated keys
+        if nfe_keys and (
+            self.generate_res_evento
+            or self.generate_proc_evento_nfe
+            or self.generate_res_nfse
+            or self.generate_proc_nfse
+        ):
+            event_types = []
+            if self.generate_res_evento or self.generate_proc_evento_nfe:
+                event_types.extend(
+                    [
+                        ("resEvento", "NF-e evento", "nfe"),
+                        ("procEventoNFe", "NF-e evento", "nfe"),
+                    ]
+                )
+            if self.generate_res_nfse or self.generate_proc_nfse:
+                event_types.extend(
+                    [
+                        ("resNfse", "NFS-e evento", "nfse"),
+                    ]
+                )
+
+            for _idx in range(min(self.quantity, len(nfe_keys))):
+                ref_key = nfe_keys[_idx]
+                partner = random.choice(partner_list)
+                partner_data = self._get_partner_data(partner)
+                emission_dt = now - timedelta(days=random.randint(0, 5))
+
+                for schema_type, display_name, fiscal_type in event_types:
+                    nsu_str = str(current_nsu).zfill(15)
+
+                    # Build event XML based on fiscal type
+                    if fiscal_type == "nfse":
+                        if "res" in schema_type:
+                            xml = self._build_res_nfse_xml(
+                                ref_key, partner_data, emission_dt
+                            )
+                        else:
+                            xml = self._build_proc_nfse_xml(
+                                ref_key, partner_data, emission_dt
+                            )
+                    else:  # nfe
+                        if "proc" in schema_type:
+                            xml = self._build_proc_evento_nfe_xml(
+                                ref_key, partner_data, emission_dt
+                            )
+                        else:
+                            xml = self._build_res_evento_xml(
+                                ref_key, partner_data, emission_dt
+                            )
+
+                    record = self.env["dfe.mock.nsu"].create(
+                        {
+                            "nsu": nsu_str,
+                            "schema_type": schema_type,
+                            "xml_content": xml,
+                            "access_key": ref_key,
+                            "company_id": self.company_id.id,
+                            "fiscal_type": fiscal_type,
+                        }
+                    )
+                    created_ids.append(record.id)
+                    current_nsu += 1
+
+        return {
+            "name": _("Generated Mock NSUs"),
+            "type": "ir.actions.act_window",
+            "res_model": "dfe.mock.nsu",
+            "view_mode": "tree,form",
+            "domain": [("id", "in", created_ids)],
+            "target": "current",
+        }
+
     def _build_res_evento_xml(self, access_key, partner_data, emission_dt):
         """Build a resEvento XML string."""
         return (
@@ -333,7 +542,7 @@ class DfeMockGenerateWizard(models.TransientModel):
             "</infEvento></evento>"
             '<retEvento versao="1.00"><infEvento>'
             "<tpAmb>2</tpAmb><verAplic>1.0</verAplic>"
-            "<cOrgao>91</cOrgao><cStat>135</cStat>"
+            "<cOrgao>91</cStat>135</cStat>"
             "<xMotivo>Evento registrado</xMotivo>"
             f"<chNFe>{access_key}</chNFe>"
             f"<dhRegEvento>"
@@ -343,115 +552,3 @@ class DfeMockGenerateWizard(models.TransientModel):
             "</infEvento></retEvento>"
             "</procEventoNFe>"
         )
-
-    def action_generate(self):
-        self.ensure_one()
-        if self.quantity < 1:
-            raise UserError(_("Quantity must be at least 1."))
-
-        partners = self._get_demo_partners()
-        partner_list = list(partners)
-        starting_nsu = self._next_nsu(self.company_id)
-        now = datetime.now()
-
-        enabled_types = []
-        if self.generate_res_nfe:
-            enabled_types.append("resNFe")
-        if self.generate_proc_nfe:
-            enabled_types.append("procNFe")
-        if (
-            not enabled_types
-            and not self.generate_res_evento
-            and not self.generate_proc_evento_nfe
-        ):
-            raise UserError(_("Select at least one document type to generate."))
-
-        created_ids = []
-        nfe_keys = []  # Track keys for event generation
-        current_nsu = starting_nsu
-
-        # Generate NF-e types first (resNFe, procNFe)
-        for _idx in range(self.quantity):
-            partner = random.choice(partner_list)
-            partner_data = self._get_partner_data(partner)
-            emission_dt = now - timedelta(days=random.randint(1, 30))
-            amount = round(random.uniform(100, 50000), 2)
-            year_month = emission_dt.strftime("%y%m")
-            number = random.randint(1, 999999999)
-            access_key = _generate_access_key(
-                partner_data["uf_code"],
-                year_month,
-                partner_data["cnpj"],
-                1,
-                number,
-            )
-            nfe_keys.append(access_key)
-
-            for schema_type in enabled_types:
-                nsu_str = str(current_nsu).zfill(15)
-                if schema_type == "resNFe":
-                    xml = self._build_res_nfe_xml(
-                        access_key, partner_data, amount, emission_dt
-                    )
-                else:
-                    xml = self._build_proc_nfe_xml(
-                        access_key, partner_data, amount, emission_dt
-                    )
-
-                record = self.env["dfe.mock.nsu"].create(
-                    {
-                        "nsu": nsu_str,
-                        "schema_type": schema_type,
-                        "xml_content": xml,
-                        "access_key": access_key,
-                        "company_id": self.company_id.id,
-                    }
-                )
-                created_ids.append(record.id)
-                current_nsu += 1
-
-        # Generate event types referencing previously generated keys
-        if nfe_keys and (self.generate_res_evento or self.generate_proc_evento_nfe):
-            event_types = []
-            if self.generate_res_evento:
-                event_types.append("resEvento")
-            if self.generate_proc_evento_nfe:
-                event_types.append("procEventoNFe")
-
-            for _idx in range(min(self.quantity, len(nfe_keys))):
-                ref_key = nfe_keys[_idx]
-                partner = random.choice(partner_list)
-                partner_data = self._get_partner_data(partner)
-                emission_dt = now - timedelta(days=random.randint(0, 5))
-
-                for schema_type in event_types:
-                    nsu_str = str(current_nsu).zfill(15)
-                    if schema_type == "resEvento":
-                        xml = self._build_res_evento_xml(
-                            ref_key, partner_data, emission_dt
-                        )
-                    else:
-                        xml = self._build_proc_evento_nfe_xml(
-                            ref_key, partner_data, emission_dt
-                        )
-
-                    record = self.env["dfe.mock.nsu"].create(
-                        {
-                            "nsu": nsu_str,
-                            "schema_type": schema_type,
-                            "xml_content": xml,
-                            "access_key": ref_key,
-                            "company_id": self.company_id.id,
-                        }
-                    )
-                    created_ids.append(record.id)
-                    current_nsu += 1
-
-        return {
-            "name": _("Generated Mock NSUs"),
-            "type": "ir.actions.act_window",
-            "res_model": "dfe.mock.nsu",
-            "view_mode": "tree,form",
-            "domain": [("id", "in", created_ids)],
-            "target": "current",
-        }

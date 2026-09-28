@@ -11,6 +11,7 @@
         <field name="arch" type="xml">
             <tree decoration-muted="consumed == True">
                 <field name="nsu" />
+                <field name="fiscal_type" />
                 <field name="schema_type" />
                 <field name="access_key" />
                 <field name="consumed" />
@@ -38,6 +39,7 @@
                     <group>
                         <group>
                             <field name="nsu" />
+                            <field name="fiscal_type" />
                             <field name="schema_type" />
                             <field name="access_key" />
                         </group>
@@ -70,8 +72,9 @@
         <field name="arch" type="xml">
             <search>
                 <field name="nsu" />
-                <field name="access_key" />
+                <field name="fiscal_type" />
                 <field name="schema_type" />
+                <field name="access_key" />
                 <filter
                     name="unconsumed"
                     string="Unconsumed"
@@ -93,6 +96,11 @@
                         name="group_consumed"
                         string="Consumed"
                         context="{'group_by': 'consumed'}"
+                    />
+                    <filter
+                        name="group_fiscal"
+                        string="Fiscal Type"
+                        context="{'group_by': 'fiscal_type'}"
                     />
                 </group>
             </search>

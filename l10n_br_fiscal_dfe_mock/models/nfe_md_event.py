@@ -2,17 +2,11 @@
 # License AGPL-3 or later (http://www.gnu.org/licenses/agpl)
 
 import logging
-import random
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from lxml import etree
-
 from odoo import models
-
-_logger = logging.getLogger(__name__)
-
 
 # ── Mock dataclasses imitating nfelib MDE response ──────────────────────
 
@@ -63,8 +57,15 @@ def _build_mde_result():
     )
 
 
+# ── Generic MDE Processor for all fiscal document types ─────────────────
+
+
 class _MockMDeProcessor:
-    """Emulates the MDeAdapter for all four manifestation operations."""
+    """Emulates the MDeAdapter for all four manifestation operations.
+
+    This processor is generic and works for NF-e, NFS-e, CT-e, MDF-e, etc.,
+    depending on the event type and fiscal document type configured.
+    """
 
     def ciencia_da_operacao(self, chave, cnpj_dest):
         return _build_mde_result()
@@ -96,54 +97,71 @@ class NfeRecipientManifestationEvent(models.Model):
         for record in self.filtered(
             lambda r: r.company_id.dfe_mock_mode and r.event_type == "ciente"
         ):
-            record._mock_generate_proc_nfe()
+            record._mock_generate_proc()
         return result
 
-    def _mock_generate_proc_nfe(self):
-        """After ciência, auto-generate a procNFe in the mock pool."""
+    def _mock_generate_proc(self):
+        """After ciência, auto-generate the appropriate manifestation XML
+        in the mock pool based on the event type and fiscal document type."""
         MockNsu = self.env["dfe.mock.nsu"].sudo()
         access_key = self.access_key
+        fiscal_type = self.fiscal_type or "nfe"
+
+        # Determine the schema_type based on fiscal_type and event_type
+        schema_map = {
+            ("nfe", "ciente"): "procNFe",
+            ("nfse", "ciente"): "procNfse",
+            ("cte", "ciente"): "procCte",
+            ("mdfe", "ciente"): "procMdf",
+        }
+        default_schema = "procNFe"  # fallback
+
+        schema_type = schema_map.get((fiscal_type, "ciente"), default_schema)
 
         existing = MockNsu.search(
             [
                 ("company_id", "=", self.company_id.id),
                 ("access_key", "=", access_key),
-                ("schema_type", "=", "procNFe"),
+                ("schema_type", "=", schema_type),
             ],
             limit=1,
         )
         if existing:
             _logger.info(
-                "MDE mock: procNFe already exists for key %s (NSU %s)",
+                "MDE mock: %s already exists for key %s (NSU %s)",
+                schema_type,
                 access_key,
                 existing.nsu,
             )
             return
 
+        # Find a matching res document in the mock pool
+        res_schema = "resNFe" if fiscal_type == "nfe" else "resNfse"
         res_nfe = MockNsu.search(
             [
                 ("company_id", "=", self.company_id.id),
                 ("access_key", "=", access_key),
-                ("schema_type", "=", "resNFe"),
+                ("schema_type", "=", res_schema),
             ],
             limit=1,
         )
         if not res_nfe:
             _logger.warning(
-                "MDE mock: no resNFe found for key %s, cannot generate procNFe",
+                "MDE mock: no res document found for key %s, cannot generate %s",
                 access_key,
+                schema_type,
             )
             return
 
-        partner_data, amount, emission_dt = self._mock_parse_res_nfe(
-            res_nfe.xml_content
+        partner_data, amount, emission_dt = self._mock_parse_res(
+            res_nfe.xml_content, fiscal_type
         )
 
         wizard = self.env["dfe.mock.generate.wizard"].new(
             {"company_id": self.company_id.id}
         )
-        proc_xml = wizard._build_proc_nfe_xml(
-            access_key, partner_data, amount, emission_dt
+        proc_xml = wizard._build_proc_xml(
+            access_key, partner_data, amount, emission_dt, fiscal_type
         )
 
         next_nsu = wizard._next_nsu(self.company_id)
@@ -152,19 +170,65 @@ class NfeRecipientManifestationEvent(models.Model):
         MockNsu.create(
             {
                 "nsu": nsu_str,
-                "schema_type": "procNFe",
+                "schema_type": schema_type,
                 "xml_content": proc_xml,
                 "access_key": access_key,
                 "company_id": self.company_id.id,
                 "consumed": False,
+                "fiscal_type": fiscal_type,
             }
         )
-        _logger.info("MDE mock: created procNFe NSU %s for key %s", nsu_str, access_key)
+        _logger.info(
+            "MDE mock: created %s NSU %s for key %s", schema_type, nsu_str, access_key
+        )
 
-    def _mock_parse_res_nfe(self, xml_content):
-        """Extract partner data, amount, and emission date from resNFe XML."""
+    def _mock_parse_res(self, xml_content, fiscal_type):
+        """Extract partner data, amount, and emission date from resXML.
+
+        Supports NF-e, NFS-e, CT-e, and MDF-e XML formats.
+        """
+
+        _logger = logging.getLogger(__name__)
+
+        # Try to detect the XML namespace/format
+        if "<resNFe" in xml_content or "<NFe" in xml_content:
+            ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+            return self._parse_nfe_xml(xml_content, ns, fiscal_type)
+        elif "<resNfse" in xml_content or "<NFSe" in xml_content:
+            # NFS-e format parsing
+            ns = {"nfse": "http://www.sped.fazenda.gov.br/nfse"}
+            return self._parse_nfse_xml(xml_content, ns, fiscal_type)
+        elif "<resCte" in xml_content or "<Cte" in xml_content:
+            # CT-e format parsing
+            ns = {"cte": "http://www.portalfiscal.inf.br/cte"}
+            return self._parse_cte_xml(xml_content, ns, fiscal_type)
+        elif "<resMdf" in xml_content or "<Mdf" in xml_content:
+            # MDF-e format parsing
+            ns = {"mdf": "http://www.portalfiscal.inf.br/mdfe"}
+            return self._parse_mdf_xml(xml_content, ns, fiscal_type)
+        else:
+            _logger.warning("MDE mock: unknown XML format, using defaults")
+            # Default generic parsing
+            cnpj = ""
+            name = "Emitente Mock"
+            ie = "ISENTO"
+            amount = 1000.00
+            # Try to extract dhEmi
+            dh_match = re.search(r"<dhEmi>([^<]+)</dhEmi>", xml_content)
+            if dh_match:
+                try:
+                    emission_dt = datetime.fromisoformat(
+                        re.sub(r"[+-]\d{2}:\d{2}$", "", dh_match.group(1))
+                    )
+                except Exception:
+                    emission_dt = datetime.now()
+            else:
+                emission_dt = datetime.now()
+            return {"cnpj": cnpj, "name": name, "ie": ie}, amount, emission_dt
+
+    def _parse_nfe_xml(self, xml_content, ns, fiscal_type):
+        """Extract partner data, amount, and emission date from NF-e resNFe XML."""
         root = etree.fromstring(xml_content.encode("utf-8"))
-        ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 
         def _text(tag, default=""):
             el = root.find(f"nfe:{tag}", ns)
@@ -184,7 +248,6 @@ class NfeRecipientManifestationEvent(models.Model):
 
         cnpj_digits = re.sub(r"[^0-9]", "", cnpj)
         uf_code = cnpj_digits[:2] if len(cnpj_digits) >= 2 else "35"
-        # UF code from access key is more reliable
         if self.access_key and len(self.access_key) >= 2:
             uf_code = self.access_key[:2]
 
@@ -195,3 +258,69 @@ class NfeRecipientManifestationEvent(models.Model):
             "ie": ie,
         }
         return partner_data, vnf, emission_dt
+
+    def _parse_nfse_xml(self, xml_content, ns, fiscal_type):
+        """Extract partner data from NFS-e resEvento XML."""
+        try:
+            root = etree.fromstring(xml_content.encode("utf-8"))
+            # NFS-e has different structure; try namespace-agnostic search
+            # Try to find CNPJ and xNome using local names
+            cnpj_el = root.find(".//CNPJ") if root is not None else None
+            nome_el = root.find(".//xNome") if root is not None else None
+
+            cnpj = cnpj_el.text if cnpj_el is not None and cnpj_el.text else ""
+            name = (
+                nome_el.text
+                if nome_el is not None and nome_el.text
+                else "Emitente Mock"
+            )
+            ie = "ISENTO"
+
+            # Try to find vLiq (total amount)
+            vliq_el = root.find(".//vLiq") if root is not None else None
+            amount = (
+                float(vliq_el.text) if vliq_el is not None and vliq_el.text else 1000.00
+            )
+
+            # Try to find dhEmi
+            dh_emi_el = root.find(".//dhEmi") if root is not None else None
+            dh_emi_str = (
+                dh_emi_el.text
+                if dh_emi_el is not None and dh_emi_el.text
+                else datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            )
+            emission_dt = datetime.fromisoformat(
+                re.sub(r"[+-]\d{2}:\d{2}$", "", dh_emi_str)
+            )
+
+            partner_data = {"cnpj": cnpj, "name": name, "ie": ie}
+            return partner_data, amount, emission_dt
+        except Exception:
+            _logger.exception("MDE mock: error parsing NFS-e XML")
+            return {
+                "cnpj": "",
+                "name": "Emitente Mock",
+                "ie": "ISENTO",
+            }, 1000.00, datetime.now()
+
+    def _parse_cte_xml(self, xml_content, ns, fiscal_type):
+        """Placeholder for CT-e XML parsing."""
+        _logger.warning(
+            "MDE mock: CT-e XML parsing not fully implemented, using defaults"
+        )
+        return {
+            "cnpj": "",
+            "name": "Emitente Mock",
+            "ie": "ISENTO",
+        }, 1000.00, datetime.now()
+
+    def _parse_mdf_xml(self, xml_content, ns, fiscal_type):
+        """Placeholder for MDF-e XML parsing."""
+        _logger.warning(
+            "MDE mock: MDF-e XML parsing not fully implemented, using defaults"
+        )
+        return {
+            "cnpj": "",
+            "name": "Emitente Mock",
+            "ie": "ISENTO",
+        }, 1000.00, datetime.now()

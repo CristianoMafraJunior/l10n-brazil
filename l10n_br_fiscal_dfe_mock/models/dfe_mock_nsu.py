@@ -11,13 +11,24 @@ class DfeMockNsu(models.Model):
     _rec_name = "nsu"
 
     nsu = fields.Char(string="NSU", size=15, required=True, index=True)
+    fiscal_type = fields.Selection(
+        selection=[
+            ("nfe", "NF-e"),
+            ("nfse", "NFS-e"),
+        ],
+        string="Fiscal Type",
+        required=True,
+    )
     schema_type = fields.Selection(
         selection=[
             ("resNFe", "resNFe"),
             ("procNFe", "procNFe"),
             ("resEvento", "resEvento"),
             ("procEventoNFe", "procEventoNFe"),
+            ("resNfse", "resNfse"),
+            ("procNfse", "procNfse"),
         ],
+        string="Schema Type",
         required=True,
     )
     xml_content = fields.Text(required=True)
@@ -32,8 +43,8 @@ class DfeMockNsu(models.Model):
     _sql_constraints = [
         (
             "nsu_company_unique",
-            "UNIQUE(nsu, company_id)",
-            "NSU must be unique per company.",
+            "UNIQUE(nsu, company_id, fiscal_type)",
+            "NSU must be unique per company and fiscal type.",
         ),
     ]
 

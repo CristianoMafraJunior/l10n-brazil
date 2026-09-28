@@ -91,7 +91,7 @@ class ResCompany(models.Model):
 
     def _dfe_get_processor(self, fiscal_type):
         self.ensure_one()
-        if self.dfe_mock_mode and fiscal_type == "nfe":
+        if self.dfe_mock_mode:
             return MockDfeClient(self)
         return super()._dfe_get_processor(fiscal_type)
 
