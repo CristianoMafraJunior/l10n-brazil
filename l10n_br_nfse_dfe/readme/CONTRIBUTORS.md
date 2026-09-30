@@ -1,2 +1,1 @@
-- [Engenere](https://engenere.one):
-  - Cristiano Mafra Junior
+- Cristiano Mafra Junior

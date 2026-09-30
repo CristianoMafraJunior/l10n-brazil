@@ -372,12 +372,6 @@ ul.auto-toc {
 <p><a class="reference external image-reference" href="https://odoo-community.org/page/development-status"><img alt="Alpha" src="https://img.shields.io/badge/maturity-Alpha-red.png" /></a> <a class="reference external image-reference" href="http://www.gnu.org/licenses/agpl-3.0-standalone.html"><img alt="License: AGPL-3" src="https://img.shields.io/badge/licence-AGPL--3-blue.png" /></a> <a class="reference external image-reference" href="https://github.com/OCA/l10n-brazil/tree/16.0/l10n_br_nfse_dfe"><img alt="OCA/l10n-brazil" src="https://img.shields.io/badge/github-OCA%2Fl10n--brazil-lightgray.png?logo=github" /></a> <a class="reference external image-reference" href="https://translation.odoo-community.org/projects/l10n-brazil-16-0/l10n-brazil-16-0-l10n_br_nfse_dfe"><img alt="Translate me on Weblate" src="https://img.shields.io/badge/weblate-Translate%20me-F47D42.png" /></a> <a class="reference external image-reference" href="https://runboat.odoo-community.org/builds?repo=OCA/l10n-brazil&amp;target_branch=16.0"><img alt="Try me on Runboat" src="https://img.shields.io/badge/runboat-Try%20me-875A7B.png" /></a></p>
 <div class="section" id="monitor-de-nfs-e-df-e-nacional-1">
 <h1>Monitor de NFS-e (DF-e Nacional)</h1>
-<p><strong>Status: Alpha.</strong> Validado com uma consulta real (mTLS + certificado
-A1) contra o ambiente de produção restrita (homologação) da ADN em
-22/09/2026. O formato de resposta, a URL e a autenticação estão
-confirmados. O cron de consulta continua <strong>desativado por padrão</strong> até
-haver mais uso em produção — veja “O que ainda não foi validado” abaixo
-pra saber exatamente o que falta.</p>
 <p>Este módulo implementa o monitoramento de <strong>NFS-e (Nota Fiscal de
 Serviço Eletrônica) de terceiros</strong> emitidas contra o CNPJ da sua
 empresa, consultando o Ambiente de Dados Nacional (ADN) do Sistema
@@ -389,16 +383,20 @@ agendamento — a única peça nova é o cliente HTTP que fala com a API
 REST/mTLS do ADN.</p>
 <div class="section" id="escopo-deliberadamente-reduzido">
 <h2>Escopo deliberadamente reduzido</h2>
-<p>Diferente do <tt class="docutils literal">l10n_br_nfe_dfe</tt>, este módulo <strong>não importa</strong> o XML
-recebido para um documento fiscal completo do Odoo. Ele consulta, baixa
-o XML bruto e o agrupa em <tt class="docutils literal">l10n_br_fiscal_dfe.document</tt> quando
-consegue achar a chave de acesso no payload (<tt class="docutils literal">_dfe_create_from_NFSe</tt>)
-— sem gerar lançamento/despesa. Por isso, ao contrário do NF-e, <strong>não
-depende de nenhum módulo de emissão</strong> (<tt class="docutils literal">l10n_br_nfse_nacional</tt> ou
-<tt class="docutils literal">l10n_br_nfse</tt>).</p>
+<ul class="simple">
+<li><strong>Não importa</strong> o XML recebido para um documento fiscal completo do
+Odoo. Ele consulta, baixa o XML bruto e o agrupa em
+<tt class="docutils literal">l10n_br_fiscal_dfe.document</tt> quando consegue achar a chave de
+acesso no payload — sem gerar lançamento/despesa.</li>
+<li><strong>Não depende</strong> de nenhum módulo de emissão (<tt class="docutils literal">l10n_br_nfse_nacional</tt>
+ou <tt class="docutils literal">l10n_br_nfse</tt>), ao contrário do que acontece com NF-e.</li>
+<li><strong>Geração de DANFSe:</strong> o PDF do documento pode ser gerado a partir do
+XML armazenado, usando a biblioteca <tt class="docutils literal">brazilfiscalreport</tt> (mesma lib
+e padrão que o <tt class="docutils literal">l10n_br_nfe_dfe</tt> já usa para o DANFE de NF-e).</li>
+</ul>
 </div>
-<div class="section" id="o-que-ja-foi-confirmado-consulta-real-em-22-09-2026">
-<h2>O que já foi confirmado (consulta real em 22/09/2026)</h2>
+<div class="section" id="confirmado-contra-o-ambiente-real-do-adn">
+<h2>Confirmado contra o ambiente real do ADN</h2>
 <ul class="simple">
 <li>URL:
 <tt class="docutils literal"><span class="pre">https://adn.producaorestrita.nfse.gov.br/contribuintes/DFe/{NSU}</span></tt>
@@ -407,28 +405,35 @@ depende de nenhum módulo de emissão</strong> (<tt class="docutils literal">l10
 <li>Autenticação mTLS com certificado A1 funciona como esperado.</li>
 <li>HTTP 404 = nenhum documento, com corpo JSON
 <tt class="docutils literal">{&quot;StatusProcessamento&quot;: &quot;NENHUM_DOCUMENTO_LOCALIZADO&quot;, &quot;LoteDFe&quot;: [], <span class="pre">...}</span></tt>.</li>
-<li>Os documentos (quando existem) vêm dentro de uma lista <tt class="docutils literal">LoteDFe</tt> —
-ou seja, uma chamada pode retornar mais de um documento, não
-necessariamente um por NSU como o manual sugeria.</li>
-<li>O parâmetro <tt class="docutils literal">cnpjConsulta</tt> existe, mas só deve ser usado pra
+<li>Os documentos vêm dentro de uma lista <tt class="docutils literal">LoteDFe</tt>, com o XML no campo
+<tt class="docutils literal">ArquivoXml</tt> (gzip+base64) — uma chamada pode retornar mais de um
+documento.</li>
+<li>A chave de acesso não vem em um elemento próprio: está embutida no
+atributo <tt class="docutils literal">Id</tt> do elemento raiz (<tt class="docutils literal">&lt;infNFSe <span class="pre">Id=&quot;NFS&lt;chave&gt;&quot;&gt;</span></tt>).</li>
+<li>O parâmetro <tt class="docutils literal">cnpjConsulta</tt> existe, mas só deve ser usado para
 consultar um CNPJ diferente do certificado (caso matriz/filial) — se
 usado com um CNPJ que não compartilha a raiz do certificado, a API
 responde <tt class="docutils literal">400</tt> com o código <tt class="docutils literal">E2243</tt>. Por isso o módulo <strong>não envia
 esse parâmetro por padrão</strong>.</li>
-<li>Ao consultar em Produção (<tt class="docutils literal">adn.nfse.gov.br</tt>) a partir de um ambiente
-de desenvolvimento sem IP liberado, a conexão é recusada — parece
-haver controle de acesso por IP nesse ambiente, diferente da
-homologação. Teste em produção só a partir de uma rede já habilitada
-junto à Receita Federal.</li>
+<li>A numeração de NSU do ADN tem buracos reais (NSUs que nunca resolvem a
+um documento para o CNPJ consultado) — a sincronização tolera esses
+buracos em vez de travar neles.</li>
 </ul>
 </div>
 <div class="section" id="o-que-ainda-nao-foi-validado">
 <h2>O que ainda não foi validado</h2>
-<p>Nunca vimos um <tt class="docutils literal">LoteDFe</tt> não vazio (a empresa de teste não tinha
-documentos em homologação), então o formato exato de cada item da lista
-— em especial o nome do campo que carrega o XML (gzip+base64) — continua
-sendo uma suposição. Veja os comentários <tt class="docutils literal">TODO(adn)</tt> em
-<tt class="docutils literal">models/adn_dfe_client.py</tt>.</p>
+<ul class="simple">
+<li>Se o ADN limita o tamanho da lista <tt class="docutils literal">LoteDFe</tt> por chamada, e em qual
+valor.</li>
+<li>O formato exato esperado para o NSU na URL (usamos um inteiro simples,
+que funcionou nos testes reais; não confirmamos se um formato
+zero-padded também é aceito).</li>
+<li>Consultas matriz/filial via <tt class="docutils literal">cnpjConsulta</tt> (não implementadas).</li>
+<li>Busca específica por chave de acesso (o ADN não expõe esse endpoint
+pela distribuição, só por NSU).</li>
+</ul>
+<p>Veja os comentários <tt class="docutils literal">TODO(adn)</tt> em <tt class="docutils literal">models/adn_dfe_client.py</tt> para o
+estado exato de cada ponto em aberto.</p>
 <div class="admonition important">
 <p class="first admonition-title">Important</p>
 <p class="last">This is an alpha version, the data model and design can change at any time without warning.
@@ -448,20 +453,23 @@ Only for development or testing purpose, do not use in production.
 para autenticação mTLS com o ADN)</li>
 </ul>
 </li>
-<li><strong>Dependências Python:</strong> nenhuma além do que <tt class="docutils literal">l10n_br_fiscal_dfe</tt> e
-<tt class="docutils literal">l10n_br_fiscal_certificate</tt> já exigem (<tt class="docutils literal">requests</tt> já vem com o
-Odoo; <tt class="docutils literal">erpbrasil.assinatura</tt> já é dependência transitiva do
-certificado).</li>
+<li><strong>Dependências Python:</strong><ul>
+<li><tt class="docutils literal">brazilfiscalreport</tt>, usado para gerar o PDF (DANFSe). As demais
+dependências (<tt class="docutils literal">requests</tt>, <tt class="docutils literal">erpbrasil.assinatura</tt>) já vêm
+transitivamente de <tt class="docutils literal">l10n_br_fiscal_dfe</tt> e
+<tt class="docutils literal">l10n_br_fiscal_certificate</tt>.</li>
+</ul>
+</li>
 </ol>
 <div class="section" id="configuracao-pre-requisito">
 <h2>Configuração pré-requisito</h2>
 <ol class="arabic simple">
 <li>Acesse o cadastro de <strong>Empresas</strong> e faça o upload de um <strong>certificado
 digital A1</strong> válido (aba de certificados).</li>
-<li>Antes de ligar a busca automática, valide manualmente pelo menos uma
-consulta específica por NSU contra o ambiente de produção restrita
-(homologação) da ADN — este módulo ainda não foi testado contra o
-ambiente real.</li>
+<li>Antes de habilitar a busca automática (cron), valide manualmente pelo
+menos uma consulta específica por NSU contra o ambiente desejado
+(produção ou homologação) para confirmar que o certificado está
+correto.</li>
 </ol>
 </div>
 </div>
@@ -475,8 +483,9 @@ ambiente real.</li>
 (ADN)</strong>.</li>
 <li>Escolha o <strong>Ambiente</strong> (Produção ou Homologação/produção restrita).</li>
 <li>Marque <strong>Auto-fetch NFS-e DF-e</strong> para habilitar a consulta periódica
-via cron — <strong>o cron vem desativado por padrão</strong> neste módulo, já que
-a integração ainda não foi validada contra o ambiente real do ADN.</li>
+via cron — <strong>o cron vem desativado por padrão</strong>, para que cada
+empresa valide seu próprio certificado antes de ligar a consulta
+automática.</li>
 </ol>
 </div>
 <div class="section" id="painel-de-controle-dashboard">
@@ -485,6 +494,11 @@ a integração ainda não foi validada contra o ambiente real do ADN.</li>
 para ver o painel de status (último NSU, próxima consulta, status da
 última consulta) e os botões de “Pesquisar Todos” / “Pesquisa
 Específica”.</p>
+</div>
+<div class="section" id="geracao-de-danfse">
+<h2>Geração de DANFSe</h2>
+<p>Na lista de documentos, o botão <strong>DANFSE</strong> gera o PDF a partir do XML já
+armazenado do documento completo.</p>
 </div>
 <div class="section" id="limitacao-conhecida">
 <h2>Limitação conhecida</h2>
@@ -512,10 +526,7 @@ If you spotted it first, help us to smash it by providing a detailed and welcome
 <div class="section" id="contributors">
 <h2>Contributors</h2>
 <ul class="simple">
-<li><a class="reference external" href="https://engenere.one">Engenere</a>:<ul>
 <li>Cristiano Mafra Junior</li>
-</ul>
-</li>
 </ul>
 </div>
 <div class="section" id="maintainers">

@@ -31,13 +31,6 @@ Monitor de NFS-e (DF-e Nacional)
 Monitor de NFS-e (DF-e Nacional)
 ================================
 
-**Status: Alpha.** Validado com uma consulta real (mTLS + certificado
-A1) contra o ambiente de produção restrita (homologação) da ADN em
-22/09/2026. O formato de resposta, a URL e a autenticação estão
-confirmados. O cron de consulta continua **desativado por padrão** até
-haver mais uso em produção — veja "O que ainda não foi validado" abaixo
-pra saber exatamente o que falta.
-
 Este módulo implementa o monitoramento de **NFS-e (Nota Fiscal de
 Serviço Eletrônica) de terceiros** emitidas contra o CNPJ da sua
 empresa, consultando o Ambiente de Dados Nacional (ADN) do Sistema
@@ -52,16 +45,18 @@ REST/mTLS do ADN.
 Escopo deliberadamente reduzido
 -------------------------------
 
-Diferente do ``l10n_br_nfe_dfe``, este módulo **não importa** o XML
-recebido para um documento fiscal completo do Odoo. Ele consulta, baixa
-o XML bruto e o agrupa em ``l10n_br_fiscal_dfe.document`` quando
-consegue achar a chave de acesso no payload (``_dfe_create_from_NFSe``)
-— sem gerar lançamento/despesa. Por isso, ao contrário do NF-e, **não
-depende de nenhum módulo de emissão** (``l10n_br_nfse_nacional`` ou
-``l10n_br_nfse``).
+- **Não importa** o XML recebido para um documento fiscal completo do
+  Odoo. Ele consulta, baixa o XML bruto e o agrupa em
+  ``l10n_br_fiscal_dfe.document`` quando consegue achar a chave de
+  acesso no payload — sem gerar lançamento/despesa.
+- **Não depende** de nenhum módulo de emissão (``l10n_br_nfse_nacional``
+  ou ``l10n_br_nfse``), ao contrário do que acontece com NF-e.
+- **Geração de DANFSe:** o PDF do documento pode ser gerado a partir do
+  XML armazenado, usando a biblioteca ``brazilfiscalreport`` (mesma lib
+  e padrão que o ``l10n_br_nfe_dfe`` já usa para o DANFE de NF-e).
 
-O que já foi confirmado (consulta real em 22/09/2026)
------------------------------------------------------
+Confirmado contra o ambiente real do ADN
+----------------------------------------
 
 - URL:
   ``https://adn.producaorestrita.nfse.gov.br/contribuintes/DFe/{NSU}``
@@ -70,28 +65,34 @@ O que já foi confirmado (consulta real em 22/09/2026)
 - Autenticação mTLS com certificado A1 funciona como esperado.
 - HTTP 404 = nenhum documento, com corpo JSON
   ``{"StatusProcessamento": "NENHUM_DOCUMENTO_LOCALIZADO", "LoteDFe": [], ...}``.
-- Os documentos (quando existem) vêm dentro de uma lista ``LoteDFe`` —
-  ou seja, uma chamada pode retornar mais de um documento, não
-  necessariamente um por NSU como o manual sugeria.
-- O parâmetro ``cnpjConsulta`` existe, mas só deve ser usado pra
+- Os documentos vêm dentro de uma lista ``LoteDFe``, com o XML no campo
+  ``ArquivoXml`` (gzip+base64) — uma chamada pode retornar mais de um
+  documento.
+- A chave de acesso não vem em um elemento próprio: está embutida no
+  atributo ``Id`` do elemento raiz (``<infNFSe Id="NFS<chave>">``).
+- O parâmetro ``cnpjConsulta`` existe, mas só deve ser usado para
   consultar um CNPJ diferente do certificado (caso matriz/filial) — se
   usado com um CNPJ que não compartilha a raiz do certificado, a API
   responde ``400`` com o código ``E2243``. Por isso o módulo **não envia
   esse parâmetro por padrão**.
-- Ao consultar em Produção (``adn.nfse.gov.br``) a partir de um ambiente
-  de desenvolvimento sem IP liberado, a conexão é recusada — parece
-  haver controle de acesso por IP nesse ambiente, diferente da
-  homologação. Teste em produção só a partir de uma rede já habilitada
-  junto à Receita Federal.
+- A numeração de NSU do ADN tem buracos reais (NSUs que nunca resolvem a
+  um documento para o CNPJ consultado) — a sincronização tolera esses
+  buracos em vez de travar neles.
 
 O que ainda não foi validado
 ----------------------------
 
-Nunca vimos um ``LoteDFe`` não vazio (a empresa de teste não tinha
-documentos em homologação), então o formato exato de cada item da lista
-— em especial o nome do campo que carrega o XML (gzip+base64) — continua
-sendo uma suposição. Veja os comentários ``TODO(adn)`` em
-``models/adn_dfe_client.py``.
+- Se o ADN limita o tamanho da lista ``LoteDFe`` por chamada, e em qual
+  valor.
+- O formato exato esperado para o NSU na URL (usamos um inteiro simples,
+  que funcionou nos testes reais; não confirmamos se um formato
+  zero-padded também é aceito).
+- Consultas matriz/filial via ``cnpjConsulta`` (não implementadas).
+- Busca específica por chave de acesso (o ADN não expõe esse endpoint
+  pela distribuição, só por NSU).
+
+Veja os comentários ``TODO(adn)`` em ``models/adn_dfe_client.py`` para o
+estado exato de cada ponto em aberto.
 
 .. IMPORTANT::
    This is an alpha version, the data model and design can change at any time without warning.
@@ -114,20 +115,22 @@ Este módulo requer:
    - ``l10n_br_fiscal_certificate`` (certificado A1 da empresa, usado
      para autenticação mTLS com o ADN)
 
-2. **Dependências Python:** nenhuma além do que ``l10n_br_fiscal_dfe`` e
-   ``l10n_br_fiscal_certificate`` já exigem (``requests`` já vem com o
-   Odoo; ``erpbrasil.assinatura`` já é dependência transitiva do
-   certificado).
+2. **Dependências Python:**
+
+   - ``brazilfiscalreport``, usado para gerar o PDF (DANFSe). As demais
+     dependências (``requests``, ``erpbrasil.assinatura``) já vêm
+     transitivamente de ``l10n_br_fiscal_dfe`` e
+     ``l10n_br_fiscal_certificate``.
 
 Configuração pré-requisito
 --------------------------
 
 1. Acesse o cadastro de **Empresas** e faça o upload de um **certificado
    digital A1** válido (aba de certificados).
-2. Antes de ligar a busca automática, valide manualmente pelo menos uma
-   consulta específica por NSU contra o ambiente de produção restrita
-   (homologação) da ADN — este módulo ainda não foi testado contra o
-   ambiente real.
+2. Antes de habilitar a busca automática (cron), valide manualmente pelo
+   menos uma consulta específica por NSU contra o ambiente desejado
+   (produção ou homologação) para confirmar que o certificado está
+   correto.
 
 Usage
 =====
@@ -140,8 +143,9 @@ Configuração
    (ADN)**.
 3. Escolha o **Ambiente** (Produção ou Homologação/produção restrita).
 4. Marque **Auto-fetch NFS-e DF-e** para habilitar a consulta periódica
-   via cron — **o cron vem desativado por padrão** neste módulo, já que
-   a integração ainda não foi validada contra o ambiente real do ADN.
+   via cron — **o cron vem desativado por padrão**, para que cada
+   empresa valide seu próprio certificado antes de ligar a consulta
+   automática.
 
 Painel de Controle (Dashboard)
 ------------------------------
@@ -150,6 +154,12 @@ Acesse **Faturamento > Fiscal > Consultas DF-e > NFS-e de Terceiros**
 para ver o painel de status (último NSU, próxima consulta, status da
 última consulta) e os botões de "Pesquisar Todos" / "Pesquisa
 Específica".
+
+Geração de DANFSe
+-----------------
+
+Na lista de documentos, o botão **DANFSE** gera o PDF a partir do XML já
+armazenado do documento completo.
 
 Limitação conhecida
 -------------------
@@ -179,9 +189,7 @@ Authors
 Contributors
 ------------
 
-- `Engenere <https://engenere.one>`__:
-
-  - Cristiano Mafra Junior
+- Cristiano Mafra Junior
 
 Maintainers
 -----------
