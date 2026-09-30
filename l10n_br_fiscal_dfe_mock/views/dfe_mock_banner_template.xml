@@ -5,9 +5,9 @@
 -->
 <odoo>
     <!-- Extends the generic DF-e banner (l10n_br_fiscal_dfe) with mock-mode
-         controls. Only nfe uses dfe_mock_mode today, and only fiscal
-         managers can flip it, so everything below stays out of the way
-         otherwise. -->
+         controls, for every fiscal type this module can mock (nfe, nfse).
+         Only fiscal managers can flip it, so everything below stays out
+         of the way otherwise. -->
     <template
         id="dfe_document_banner_mock"
         inherit_id="l10n_br_fiscal_dfe.dfe_document_banner"
@@ -18,7 +18,7 @@
             position="before"
         >
             <t
-                t-if="fiscal_type == 'nfe' and company.env.user.has_group('l10n_br_fiscal.group_manager')"
+                t-if="fiscal_type in ('nfe', 'nfse') and company.env.user.has_group('l10n_br_fiscal.group_manager')"
             >
                 <t t-if="company.dfe_mock_mode">
                     <div
@@ -46,7 +46,7 @@
                                 type="action"
                                 role="button"
                                 data-model="res.company"
-                                data-method="action_reset_dfe_cooldown"
+                                t-att-data-method="'action_reset_dfe_cooldown_' + fiscal_type"
                                 class="btn btn-sm btn-outline-dark text-nowrap"
                             >
                                 <i class="fa fa-refresh" /> Resetar Cooldown

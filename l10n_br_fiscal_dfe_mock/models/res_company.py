@@ -92,8 +92,36 @@ class ResCompany(models.Model):
 
     @api.model
     def action_reset_dfe_cooldown(self):
+        """Standalone "Reset Query Cooldown" menu item: no fiscal_type
+        context available there, so it resets every mocked type."""
         company = self.env.company
-        company._dfe_write_typed("nfe", {"dfe_next_query": False})
+        for fiscal_type in ("nfe", "nfse"):
+            company._dfe_write_typed(fiscal_type, {"dfe_next_query": False})
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "DF-e Query Cooldown Reset",
+                "message": f"Query cooldown cleared for {company.name}.",
+                "type": "info",
+                "sticky": False,
+                "next": {"type": "ir.actions.client", "tag": "soft_reload"},
+            },
+        }
+
+    def action_reset_dfe_cooldown_nfe(self):
+        """Banner button variant: resolved per fiscal_type by the
+        template (``'action_reset_dfe_cooldown_' + fiscal_type``), so
+        it only clears the cooldown of the screen the user is on."""
+        return self.env.company._dfe_reset_cooldown_typed("nfe")
+
+    def action_reset_dfe_cooldown_nfse(self):
+        return self.env.company._dfe_reset_cooldown_typed("nfse")
+
+    @api.model
+    def _dfe_reset_cooldown_typed(self, fiscal_type):
+        company = self.env.company
+        company._dfe_write_typed(fiscal_type, {"dfe_next_query": False})
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",

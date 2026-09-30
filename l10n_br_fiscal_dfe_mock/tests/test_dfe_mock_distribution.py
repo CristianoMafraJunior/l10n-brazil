@@ -149,9 +149,37 @@ class TestDfeMockDistribution(TransactionCase):
     # ── cooldown reset ──────────────────────────────────────────────────
 
     def test_reset_cooldown_clears_typed_field(self):
-        self.company.sudo().write({"nfe_dfe_next_query": fields.Datetime.now()})
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
         self.company.with_company(self.company).action_reset_dfe_cooldown()
         self.assertFalse(self.company.nfe_dfe_next_query)
+        self.assertFalse(self.company.nfse_dfe_next_query)
+
+    def test_reset_cooldown_nfe_only_clears_nfe(self):
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
+        self.company.with_company(self.company).action_reset_dfe_cooldown_nfe()
+        self.assertFalse(self.company.nfe_dfe_next_query)
+        self.assertTrue(self.company.nfse_dfe_next_query)
+
+    def test_reset_cooldown_nfse_only_clears_nfse(self):
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
+        self.company.with_company(self.company).action_reset_dfe_cooldown_nfse()
+        self.assertTrue(self.company.nfe_dfe_next_query)
+        self.assertFalse(self.company.nfse_dfe_next_query)
 
     # ── NFS-e: same pool, different fiscal_type ──────────────────────────
 
