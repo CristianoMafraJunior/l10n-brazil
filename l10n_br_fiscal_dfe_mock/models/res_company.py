@@ -109,12 +109,14 @@ class ResCompany(models.Model):
             },
         }
 
+    @api.model
     def action_reset_dfe_cooldown_nfe(self):
         """Banner button variant: resolved per fiscal_type by the
         template (``'action_reset_dfe_cooldown_' + fiscal_type``), so
         it only clears the cooldown of the screen the user is on."""
         return self.env.company._dfe_reset_cooldown_typed("nfe")
 
+    @api.model
     def action_reset_dfe_cooldown_nfse(self):
         return self.env.company._dfe_reset_cooldown_typed("nfse")
 

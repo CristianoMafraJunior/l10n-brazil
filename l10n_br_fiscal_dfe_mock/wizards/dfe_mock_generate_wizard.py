@@ -145,8 +145,17 @@ class DfeMockGenerateWizard(models.TransientModel):
         }
 
     def _next_nsu(self, company):
-        """Calculate the next NSU number for a company."""
-        last = (
+        """Calculate the next NSU number for a company.
+
+        Must stay ahead not only of the mock pool's own NSUs, but also
+        of the company's real ``<fiscal_type>_last_nsu`` cursor(s) —
+        otherwise, on a company that already queried the real
+        SEFAZ/ADN before (so its cursor sits at, say, 110), freshly
+        generated mock NSUs starting at 1 would be silently invisible
+        to any future mock query (``nsu > ultimo_nsu`` never matches
+        them).
+        """
+        last_mock = (
             self.env["dfe.mock.nsu"]
             .sudo()
             .search(
@@ -155,9 +164,11 @@ class DfeMockGenerateWizard(models.TransientModel):
                 limit=1,
             )
         )
-        if last:
-            return int(last.nsu) + 1
-        return 1
+        candidates = [int(last_mock.nsu)] if last_mock else []
+        for fiscal_type in ("nfe", "nfse"):
+            cursor = company._dfe_get_typed_value(fiscal_type, "last_nsu", "0")
+            candidates.append(int(cursor or "0"))
+        return max(candidates, default=0) + 1
 
     def _build_res_nfe_xml(self, access_key, partner_data, amount, emission_dt):
         """Build a resNFe XML string."""
