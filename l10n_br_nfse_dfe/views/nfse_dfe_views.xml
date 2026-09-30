@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record model="ir.ui.view" id="nfse_dfe_document_tree">
+        <field name="name">l10n_br_fiscal_dfe.document.tree.nfse</field>
+        <field name="model">l10n_br_fiscal_dfe.document</field>
+        <field
+            name="inherit_id"
+            ref="l10n_br_fiscal_dfe.l10n_br_fiscal_dfe_document_tree"
+        />
+        <field name="priority">10</field>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute
+                    name="banner_route"
+                >/l10n_br_fiscal_dfe/document_banner/nfse</attribute>
+            </xpath>
+            <xpath expr="//button[@name='action_download_xml']" position="after">
+                <button
+                    string="DANFSE"
+                    name="make_pdf"
+                    type="object"
+                    icon="fa-file-pdf-o"
+                />
+            </xpath>
+        </field>
+    </record>
+
+    <!-- NFS-e additions to the generic document form: the base "PDF"
+         button is relabeled "DANFE" by l10n_br_nfe_dfe (NF-e specific
+         wording), so for NFS-e records we hide that one and show our
+         own "DANFSE"-labeled button instead. The "Import" button is
+         hidden outright: this module never creates a fiscal_document,
+         so it would never do anything useful here. -->
+    <record id="view_l10n_br_fiscal_dfe_document_form_nfse" model="ir.ui.view">
+        <field name="name">l10n_br_fiscal_dfe.document.form.nfse</field>
+        <field name="model">l10n_br_fiscal_dfe.document</field>
+        <field
+            name="inherit_id"
+            ref="l10n_br_fiscal_dfe.l10n_br_fiscal_dfe_document_form"
+        />
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='make_pdf']" position="attributes">
+                <attribute
+                    name="attrs"
+                >{'invisible': [('fiscal_type', '=', 'nfse')]}</attribute>
+            </xpath>
+            <xpath expr="//button[@name='make_pdf']" position="after">
+                <button
+                    string="DANFSE"
+                    name="make_pdf"
+                    type="object"
+                    icon="fa-file-pdf-o"
+                    attrs="{'invisible': [('fiscal_type', '!=', 'nfse')]}"
+                />
+            </xpath>
+            <!-- l10n_br_nfe_dfe's own "Import" button already has its own
+                 attrs, keyed on fiscal_document_id (a field it adds to the
+                 model) — a field this module doesn't depend on and can't
+                 safely reference itself (Odoo requires any field used in
+                 attrs to exist on the model at view-load time, which broke
+                 when this module's views loaded before l10n_br_nfe_dfe's
+                 model extension was applied). So instead of touching that
+                 button's attrs at all, wrap it (via two steps: insert an
+                 empty span, then move the button inside it) in a span with
+                 its own, independent "hide for nfse" condition using only
+                 the base fiscal_type field — both conditions apply,
+                 neither module needs to know about the other's. -->
+            <xpath expr="//button[@name='import_document']" position="before">
+                <span
+                    class="l10n_br_nfse_dfe_import_wrapper"
+                    attrs="{'invisible': [('fiscal_type', '=', 'nfse')]}"
+                />
+            </xpath>
+            <xpath
+                expr="//span[hasclass('l10n_br_nfse_dfe_import_wrapper')]"
+                position="inside"
+            >
+                <xpath expr="//button[@name='import_document']" position="move" />
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_nfse_dfe_document" model="ir.actions.act_window">
+        <field name="name">NFS-e de Terceiros</field>
+        <field name="res_model">l10n_br_fiscal_dfe.document</field>
+        <field name="view_mode">tree,form</field>
+        <field
+            name="domain"
+        >[('fiscal_type', '=', 'nfse'), ('is_own_document', '=', False)]</field>
+        <field name="context">{'default_fiscal_type': 'nfse'}</field>
+        <field
+            name="view_ids"
+            eval="[(5, 0, 0),
+                   (0, 0, {'view_mode': 'tree',
+                           'view_id': ref('nfse_dfe_document_tree')}),
+                   (0, 0, {'view_mode': 'form',
+                           'view_id': ref('l10n_br_fiscal_dfe.l10n_br_fiscal_dfe_document_form')})]"
+        />
+    </record>
+
+    <menuitem
+        id="menu_l10n_br_nfse_dfe_document"
+        name="NFS-e de Terceiros"
+        action="action_nfse_dfe_document"
+        parent="l10n_br_fiscal_dfe.menu_l10n_br_fiscal_dfe_root"
+        sequence="20"
+    />
+</odoo>

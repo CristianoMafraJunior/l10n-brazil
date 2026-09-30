@@ -13,11 +13,14 @@
                     <field name="company_id" groups="base.group_multi_company" />
                     <field name="quantity" />
                 </group>
-                <group string="Document Types">
+                <group string="NF-e">
                     <field name="generate_res_nfe" />
                     <field name="generate_proc_nfe" />
                     <field name="generate_res_evento" />
                     <field name="generate_proc_evento_nfe" />
+                </group>
+                <group string="NFS-e">
+                    <field name="generate_nfse" />
                 </group>
                 <footer>
                     <button

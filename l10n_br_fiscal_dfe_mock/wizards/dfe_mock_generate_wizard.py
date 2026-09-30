@@ -81,6 +81,17 @@ def _generate_access_key(uf_code, year_month, cnpj_digits, serie, number, cnf=No
     return key_43 + _compute_access_key_check_digit(key_43)
 
 
+def _generate_nfse_access_key():
+    """Generate a 50-digit NFS-e Nacional access key.
+
+    Unlike the NF-e key above, ADN's real check-digit algorithm for
+    NFS-e access keys isn't confirmed (see l10n_br_nfse_dfe's readme),
+    so this is just 50 random digits — good enough to look right and
+    round-trip through the module, not a real checksum.
+    """
+    return "".join(str(random.randint(0, 9)) for _ in range(50))
+
+
 class DfeMockGenerateWizard(models.TransientModel):
     _name = "dfe.mock.generate.wizard"
     _description = "Generate Mock NSU Records"
@@ -97,6 +108,7 @@ class DfeMockGenerateWizard(models.TransientModel):
     generate_proc_evento_nfe = fields.Boolean(
         default=False, string="Generate procEventoNFe"
     )
+    generate_nfse = fields.Boolean(default=False, string="Generate NFS-e")
 
     def _get_demo_partners(self):
         """Load demo partners from l10n_br_base, with fallback to search."""
@@ -133,8 +145,17 @@ class DfeMockGenerateWizard(models.TransientModel):
         }
 
     def _next_nsu(self, company):
-        """Calculate the next NSU number for a company."""
-        last = (
+        """Calculate the next NSU number for a company.
+
+        Must stay ahead not only of the mock pool's own NSUs, but also
+        of the company's real ``<fiscal_type>_last_nsu`` cursor(s) —
+        otherwise, on a company that already queried the real
+        SEFAZ/ADN before (so its cursor sits at, say, 110), freshly
+        generated mock NSUs starting at 1 would be silently invisible
+        to any future mock query (``nsu > ultimo_nsu`` never matches
+        them).
+        """
+        last_mock = (
             self.env["dfe.mock.nsu"]
             .sudo()
             .search(
@@ -143,9 +164,11 @@ class DfeMockGenerateWizard(models.TransientModel):
                 limit=1,
             )
         )
-        if last:
-            return int(last.nsu) + 1
-        return 1
+        candidates = [int(last_mock.nsu)] if last_mock else []
+        for fiscal_type in ("nfe", "nfse"):
+            cursor = company._dfe_get_typed_value(fiscal_type, "last_nsu", "0")
+            candidates.append(int(cursor or "0"))
+        return max(candidates, default=0) + 1
 
     def _build_res_nfe_xml(self, access_key, partner_data, amount, emission_dt):
         """Build a resNFe XML string."""
@@ -344,6 +367,60 @@ class DfeMockGenerateWizard(models.TransientModel):
             "</procEventoNFe>"
         )
 
+    def _build_nfse_xml(
+        self, access_key, partner_data, amount, emission_dt, document_number
+    ):
+        """Build a NFS-e XML string, matching the shape confirmed against
+        the real ADN in l10n_br_nfse_dfe: access key in the root
+        ``<infNFSe Id="NFS<chave>">`` attribute, no separate element."""
+        serie = str(random.randint(1, 99999)).zfill(5)
+        return (
+            '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+            f'<infNFSe Id="NFS{access_key}">'
+            f"<nNFSe>{document_number}</nNFSe>"
+            "<cStat>100</cStat>"
+            f"<emit><CNPJ>{partner_data['cnpj']}</CNPJ>"
+            f"<xNome>{partner_data['name']}</xNome></emit>"
+            f"<valores><vLiq>{amount:.2f}</vLiq></valores>"
+            "<DPS><infDPS>"
+            f"<dhEmi>{emission_dt.strftime('%Y-%m-%dT%H:%M:%S')}-03:00</dhEmi>"
+            f"<serie>{serie}</serie>"
+            "</infDPS></DPS>"
+            "</infNFSe>"
+            "</NFSe>"
+        )
+
+    def _generate_nfse_mocks(self, partner_list, starting_nsu):
+        """Create ``quantity`` mock NFS-e ``dfe.mock.nsu`` records,
+        returning the list of created ids and the next free NSU."""
+        now = datetime.now()
+        created_ids = []
+        current_nsu = starting_nsu
+        for _idx in range(self.quantity):
+            partner = random.choice(partner_list)
+            partner_data = self._get_partner_data(partner)
+            emission_dt = now - timedelta(days=random.randint(1, 30))
+            amount = round(random.uniform(100, 50000), 2)
+            access_key = _generate_nfse_access_key()
+            document_number = random.randint(1, 999999999)
+            xml = self._build_nfse_xml(
+                access_key, partner_data, amount, emission_dt, document_number
+            )
+
+            record = self.env["dfe.mock.nsu"].create(
+                {
+                    "nsu": str(current_nsu).zfill(15),
+                    "fiscal_type": "nfse",
+                    "schema_type": "NFSe",
+                    "xml_content": xml,
+                    "access_key": access_key,
+                    "company_id": self.company_id.id,
+                }
+            )
+            created_ids.append(record.id)
+            current_nsu += 1
+        return created_ids, current_nsu
+
     def action_generate(self):
         self.ensure_one()
         if self.quantity < 1:
@@ -363,6 +440,7 @@ class DfeMockGenerateWizard(models.TransientModel):
             not enabled_types
             and not self.generate_res_evento
             and not self.generate_proc_evento_nfe
+            and not self.generate_nfse
         ):
             raise UserError(_("Select at least one document type to generate."))
 
@@ -446,6 +524,10 @@ class DfeMockGenerateWizard(models.TransientModel):
                     )
                     created_ids.append(record.id)
                     current_nsu += 1
+
+        if self.generate_nfse:
+            nfse_ids, current_nsu = self._generate_nfse_mocks(partner_list, current_nsu)
+            created_ids.extend(nfse_ids)
 
         return {
             "name": _("Generated Mock NSUs"),

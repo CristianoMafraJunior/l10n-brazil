@@ -46,18 +46,21 @@ class MockWrappedResponse:
 
 
 class MockDfeClient:
-    """Stand-in for the SEFAZ SOAP client returned by ``_dfe_get_processor``.
+    """Stand-in for the SEFAZ/ADN client returned by ``_dfe_get_processor``.
 
     Exposes the same ``consultar_distribuicao(**kwargs)`` entry point the
     generic DF-e engine calls, answering from the local mock NSU pool
-    instead of reaching the SEFAZ web service.
+    instead of reaching SEFAZ/ADN. Bound to a single ``fiscal_type`` at
+    construction time (like the real processors), so a query for one
+    fiscal type never pulls in mock documents of another.
     """
 
-    def __init__(self, company):
+    def __init__(self, company, fiscal_type):
         self.company = company
+        self.fiscal_type = fiscal_type
 
     def consultar_distribuicao(self, **kwargs):
-        return self.company._dfe_mock_build_response(**kwargs)
+        return self.company._dfe_mock_build_response(self.fiscal_type, **kwargs)
 
 
 class ResCompany(models.Model):
@@ -89,8 +92,38 @@ class ResCompany(models.Model):
 
     @api.model
     def action_reset_dfe_cooldown(self):
+        """Standalone "Reset Query Cooldown" menu item: no fiscal_type
+        context available there, so it resets every mocked type."""
         company = self.env.company
-        company._dfe_write_typed("nfe", {"dfe_next_query": False})
+        for fiscal_type in ("nfe", "nfse"):
+            company._dfe_write_typed(fiscal_type, {"dfe_next_query": False})
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "DF-e Query Cooldown Reset",
+                "message": f"Query cooldown cleared for {company.name}.",
+                "type": "info",
+                "sticky": False,
+                "next": {"type": "ir.actions.client", "tag": "soft_reload"},
+            },
+        }
+
+    @api.model
+    def action_reset_dfe_cooldown_nfe(self):
+        """Banner button variant: resolved per fiscal_type by the
+        template (``'action_reset_dfe_cooldown_' + fiscal_type``), so
+        it only clears the cooldown of the screen the user is on."""
+        return self.env.company._dfe_reset_cooldown_typed("nfe")
+
+    @api.model
+    def action_reset_dfe_cooldown_nfse(self):
+        return self.env.company._dfe_reset_cooldown_typed("nfse")
+
+    @api.model
+    def _dfe_reset_cooldown_typed(self, fiscal_type):
+        company = self.env.company
+        company._dfe_write_typed(fiscal_type, {"dfe_next_query": False})
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
@@ -105,17 +138,17 @@ class ResCompany(models.Model):
 
     def _dfe_get_processor(self, fiscal_type):
         self.ensure_one()
-        if self.dfe_mock_mode and fiscal_type == "nfe":
-            return MockDfeClient(self)
+        if self.dfe_mock_mode and fiscal_type in ("nfe", "nfse"):
+            return MockDfeClient(self, fiscal_type)
         return super()._dfe_get_processor(fiscal_type)
 
-    def _dfe_mock_build_response(self, **kwargs):
+    def _dfe_mock_build_response(self, fiscal_type, **kwargs):
         MockNsu = self.env["dfe.mock.nsu"].sudo()
         ultimo_nsu = kwargs.get("ultimo_nsu", "000000000000000")
         chave = kwargs.get("chave")
         nsu_especifico = kwargs.get("nsu_especifico")
 
-        domain = [("company_id", "=", self.id)]
+        domain = [("company_id", "=", self.id), ("fiscal_type", "=", fiscal_type)]
 
         if nsu_especifico:
             domain.append(("nsu", "=", nsu_especifico))
@@ -131,7 +164,7 @@ class ResCompany(models.Model):
 
         if not records:
             max_nsu_rec = MockNsu.search(
-                [("company_id", "=", self.id)],
+                [("company_id", "=", self.id), ("fiscal_type", "=", fiscal_type)],
                 order="nsu desc",
                 limit=1,
             )
@@ -172,7 +205,7 @@ class ResCompany(models.Model):
             records.write({"consumed": True})
 
         max_nsu_rec = MockNsu.search(
-            [("company_id", "=", self.id)],
+            [("company_id", "=", self.id), ("fiscal_type", "=", fiscal_type)],
             order="nsu desc",
             limit=1,
         )

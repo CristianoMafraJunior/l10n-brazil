@@ -23,6 +23,18 @@ NFE_DFE_PROCESSOR = (
     "odoo.addons.l10n_br_nfe_dfe.models.res_company.ResCompany._dfe_get_processor"
 )
 
+NFSE_ACCESS_KEY = "4" * 50
+SAMPLE_NFSE = (
+    '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+    f'<infNFSe Id="NFS{NFSE_ACCESS_KEY}">'
+    "<nNFSe>2300000000054</nNFSe>"
+    "<cStat>100</cStat>"
+    "<emit><CNPJ>21990799000180</CNPJ><xNome>Partner NFSe Mock</xNome></emit>"
+    "<valores><vLiq>269.90</vLiq></valores>"
+    "</infNFSe>"
+    "</NFSe>"
+)
+
 
 class TestDfeMockDistribution(TransactionCase):
     """Tests for the mock DF-e distribution processor on res.company."""
@@ -46,6 +58,19 @@ class TestDfeMockDistribution(TransactionCase):
                 "schema_type": schema_type,
                 "xml_content": SAMPLE_RES_NFE,
                 "access_key": access_key or ACCESS_KEY,
+                "company_id": self.company.id,
+                "consumed": consumed,
+            }
+        )
+
+    def _create_nfse_nsu(self, nsu, access_key=None, consumed=False):
+        return self.env["dfe.mock.nsu"].create(
+            {
+                "nsu": nsu,
+                "fiscal_type": "nfse",
+                "schema_type": "NFSe",
+                "xml_content": SAMPLE_NFSE,
+                "access_key": access_key or NFSE_ACCESS_KEY,
                 "company_id": self.company.id,
                 "consumed": consumed,
             }
@@ -124,6 +149,83 @@ class TestDfeMockDistribution(TransactionCase):
     # ── cooldown reset ──────────────────────────────────────────────────
 
     def test_reset_cooldown_clears_typed_field(self):
-        self.company.sudo().write({"nfe_dfe_next_query": fields.Datetime.now()})
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
         self.company.with_company(self.company).action_reset_dfe_cooldown()
         self.assertFalse(self.company.nfe_dfe_next_query)
+        self.assertFalse(self.company.nfse_dfe_next_query)
+
+    def test_reset_cooldown_nfe_only_clears_nfe(self):
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
+        self.company.with_company(self.company).action_reset_dfe_cooldown_nfe()
+        self.assertFalse(self.company.nfe_dfe_next_query)
+        self.assertTrue(self.company.nfse_dfe_next_query)
+
+    def test_reset_cooldown_nfse_only_clears_nfse(self):
+        self.company.sudo().write(
+            {
+                "nfe_dfe_next_query": fields.Datetime.now(),
+                "nfse_dfe_next_query": fields.Datetime.now(),
+            }
+        )
+        self.company.with_company(self.company).action_reset_dfe_cooldown_nfse()
+        self.assertTrue(self.company.nfe_dfe_next_query)
+        self.assertFalse(self.company.nfse_dfe_next_query)
+
+    # ── NFS-e: same pool, different fiscal_type ──────────────────────────
+
+    def test_get_processor_mock_mode_on_nfse(self):
+        processor = self.company._dfe_get_processor("nfse")
+        self.assertIsInstance(processor, MockDfeClient)
+
+    def test_nfse_pagination_returns_and_consumes_documents(self):
+        record = self._create_nfse_nsu("000000000000001")
+        resp = self.company._dfe_get_processor("nfse").consultar_distribuicao(
+            ultimo_nsu="000000000000000"
+        )
+        self.assertEqual(resp.resposta.cStat, "138")
+        doc_zips = resp.resposta.loteDistDFeInt.docZip
+        self.assertEqual(len(doc_zips), 1)
+        self.assertEqual(doc_zips[0].schema, "NFSe")
+        self.assertEqual(
+            gzip.decompress(doc_zips[0].value).decode("utf-8"), SAMPLE_NFSE
+        )
+        self.assertTrue(record.consumed)
+
+    def test_nfse_specific_search_by_access_key(self):
+        self._create_nfse_nsu("000000000000001")
+        resp = self.company._dfe_get_processor("nfse").consultar_distribuicao(
+            chave=NFSE_ACCESS_KEY
+        )
+        self.assertEqual(resp.resposta.cStat, "138")
+        self.assertEqual(len(resp.resposta.loteDistDFeInt.docZip), 1)
+
+    def test_nfe_and_nfse_pools_do_not_leak_into_each_other(self):
+        """A query for one fiscal type must never return the other's
+        mock documents, even though both share the same NSU pool
+        model and the same company."""
+        self._create_nsu("000000000000001")
+        self._create_nfse_nsu("000000000000002")
+
+        nfe_resp = self.company._dfe_get_processor("nfe").consultar_distribuicao(
+            ultimo_nsu="000000000000000"
+        )
+        self.assertEqual(len(nfe_resp.resposta.loteDistDFeInt.docZip), 1)
+        self.assertEqual(
+            nfe_resp.resposta.loteDistDFeInt.docZip[0].schema, "resNFe_v1.00.xsd"
+        )
+
+        nfse_resp = self.company._dfe_get_processor("nfse").consultar_distribuicao(
+            ultimo_nsu="000000000000000"
+        )
+        self.assertEqual(len(nfse_resp.resposta.loteDistDFeInt.docZip), 1)
+        self.assertEqual(nfse_resp.resposta.loteDistDFeInt.docZip[0].schema, "NFSe")
